@@ -1037,7 +1037,7 @@ class Parser {
 						}
 						if( t == TQuestionDot ) {
 							var star = readChar();
-							if( star == '*.code ) {
+							if( star == "*".code ) {
 								isStar = true;
 								break;
 							}

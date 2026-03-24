@@ -1019,7 +1019,7 @@ class Parser {
 					var t = null;
 					while( true ) {
 						t = token();
-						if( t != TDot && t != TQuestionDot ) {
+						if( t != TDot ) {
 							if(t.match(TId("as"))) {
 								if(isUsing) error(ECustom('Expected . or ;'),tokenMin,tokenMax);
 								t = token();
@@ -1035,20 +1035,13 @@ class Parser {
 							push(t);
 							break;
 						}
-						if( t == TQuestionDot ) {
-							var star = readChar();
-							if( star == "*".code ) {
-								isStar = true;
-								break;
-							}
-							this.char = star;
-							this.readPos--;
-							invalidChar(star);
-						}
 						t = token();
 						switch( t ) {
 							case TId(id):
 								path.push(id);
+							case TOp("*"):
+								isStar = true;
+								break;
 							default:
 								unexpected(t);
 						}

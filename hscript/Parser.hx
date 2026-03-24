@@ -490,9 +490,15 @@ class Parser {
 			var first = true;
 			while( tk != TBkClose && (!resumeErrors || tk != TEof) ) {
 				if (!first) {
-					if (tk != TComma)
-						unexpected(tk);
-					else {
+					if (tk != TComma) {
+						// Allow implicit comma for certain expression starters
+						var isImplicitComma = switch(tk) {
+							case TId(_), TPOpen, TBrOpen, TOp(_): true;
+							default: false;
+						};
+						if (!isImplicitComma)
+							unexpected(tk);
+					} else {
 						tk = token();
 						if (tk == TBkClose)
 							break;
@@ -1009,10 +1015,11 @@ class Parser {
 				case TId(id):
 					var path = [id];
 					var asname:String = null;
+					var isStar:Bool = false;
 					var t = null;
 					while( true ) {
 						t = token();
-						if( t != TDot ) {
+						if( t != TDot && t != TQuestionDot ) {
 							if(t.match(TId("as"))) {
 								if(isUsing) error(ECustom('Expected . or ;'),tokenMin,tokenMax);
 								t = token();
@@ -1028,6 +1035,16 @@ class Parser {
 							push(t);
 							break;
 						}
+						if( t == TQuestionDot ) {
+							var star = readChar();
+							if( star == '*.code ) {
+								isStar = true;
+								break;
+							}
+							this.char = star;
+							this.readPos--;
+							invalidChar(star);
+						}
 						t = token();
 						switch( t ) {
 							case TId(id):
@@ -1039,7 +1056,7 @@ class Parser {
 					ensure(TSemicolon);
 					push(TSemicolon);
 					var p = path.join(".");
-					mk(EImport(p, asname, isUsing),p1);
+					mk(EImport(p, asname, isUsing, isStar),p1);
 				default:
 					unexpected(tk);
 					null;

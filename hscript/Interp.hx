@@ -69,6 +69,7 @@ class RedeclaredVar {
 }
 
 @:access(hscript.CustomClass)
+@:access(hscript.SScript)
 @:analyzer(optimize, local_dce, fusion, user_var_fusion)
 class Interp {
 	private var hasScriptObject(default, null):Bool = false;
@@ -153,6 +154,13 @@ class Interp {
 	];
 
 	var usingHandler:UsingHandler;
+
+	var script:SScript;
+	public var specialObject:{obj:Dynamic, ?includeFunctions:Bool, ?exclusions:Array<String>} = {obj: null, includeFunctions: null, exclusions: null};
+
+	public inline function setScr(s:SScript) {
+		script = s;
+	}
 
 	#if hscriptPos
 	var curExpr:Expr;
@@ -654,6 +662,24 @@ class Interp {
 		if(customClasses.exists(id))
 			return customClasses.get(id);
 
+		if (specialObject != null && specialObject.obj != null) {
+			var specialObj = specialObject.obj;
+			var exclusions = specialObject.exclusions;
+			
+			if (exclusions == null || !exclusions.contains(id)) {
+				try {
+					var val = UnsafeReflect.getProperty(specialObj, id);
+					if (specialObject.includeFunctions == false && Reflect.isFunction(val)) {
+						// Skip functions if includeFunctions is false
+					} else {
+						return val;
+					}
+				} catch (e:Dynamic) {
+					// Property not accessible, continue to next check
+				}
+			}
+		}
+
 		if (hasScriptObject) {
 			// search in object
 			if (id == "this") {
@@ -742,8 +768,35 @@ class Interp {
 					beforeAlias = null;
 					setAlias = null;
 				}
-			case EImport(clsName, aliasAs, isUsing):
+			case EImport(clsName, aliasAs, isUsing, isStar):
 				if(!importEnabled) return null;
+
+				if(isStar) {
+					var realClassName = clsName;
+					if(importBlocklist.contains(realClassName)) return null;
+					
+					var cls = Type.resolveClass(realClassName);
+					if(cls != null) {
+						for(field in Reflect.fields(cls)) {
+							if(!variables.exists(field)) {
+								var t:Dynamic = Reflect.field(cls, field);
+								if(t != null && (Type.getClass(t) != null || Type.getEnum(t) != null)) {
+									variables.set(field, t);
+								}
+							}
+						}
+						var statics = Type.getClassFields(cls);
+						for(f in statics) {
+							if(!variables.exists(f)) {
+								var t:Dynamic = Reflect.getProperty(cls, f);
+								if(t != null && (Type.getClass(t) != null || Type.getEnum(t) != null)) {
+									variables.set(f, t);
+								}
+							}
+						}
+					}
+					return null;
+				}
 
 				var splitClassName:Array<String> = [for (e in clsName.split(".")) e.trim()];
 				var realClassName = splitClassName.join(".");

@@ -126,7 +126,7 @@ class Bytes {
 		switch( e ) {
 		case EPackage(n):
 			// TODO
-		case EImport(c):
+		case EImport(c, _, _, _):
 			// TODO
 		case EClass(_, _, _, _):
 			// TODO

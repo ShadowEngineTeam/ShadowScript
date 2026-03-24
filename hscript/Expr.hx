@@ -80,7 +80,7 @@ enum Expr {
 	ECheckType( e : Expr, t : CType );
 
 	EPackage( ?n:String );
-	EImport( c : String, ?asname:String, ?isUsing:Bool );
+	EImport( c : String, ?asname:String, ?isUsing:Bool, ?isStar:Bool );
 	EClass( name:String, fields:Array<Expr>, ?extend:String, interfaces:Array<String>, ?isFinal:Bool, ?isPrivate:Bool );
 	EEnum( en:EnumDecl, ?isAbstract:Bool );
 	ECast(e:Expr, ?t:CType);

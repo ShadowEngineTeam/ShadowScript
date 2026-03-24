@@ -68,6 +68,8 @@ class Parser {
 	**/
 	public var preprocessorValues : Map<String,Dynamic> = new Map();
 
+	public static var defaultDefines : Map<String, Dynamic> = hscript.macros.DefinesMacro.buildDefaultDefines();
+
 	/**
 		activate JSON compatiblity
 	**/
@@ -126,6 +128,7 @@ class Parser {
 	public function new() {
 		line = 1;
 		opChars = "+*/-=!><&|^%~";
+		preprocessorValues = defaultDefines;
 		identChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_";
 		var priorities = [
 			["%"],

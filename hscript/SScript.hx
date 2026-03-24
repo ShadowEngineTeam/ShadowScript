@@ -48,36 +48,13 @@ class SScript {
 	public var parsingException(default, null):SScriptException;
 	public var packagePath(get, null):String = "";
 
-	@:noPrivateAccess public static final defaultDefines:Map<String, String> = #if macro null #else buildDefaultDefines() #end;
-	@:noPrivateAccess static var defines(default, null):Map<String, String>;
-
 	@:deprecated("parsingExceptions are deprecated, use parsingException instead")
 	var parsingExceptions(get, never):Array<Exception>;
 
 	@:noPrivateAccess var _destroyed(default, null):Bool = false;
 
-	#if macro
-	static function buildDefaultDefines():Map<String, String> {
-		return new Map();
-	}
-	#else
-	static function buildDefaultDefines():Map<String, String> {
-		var m = new Map<String, String>();
-		#if sys
-		m.set("sys", "1");
-		#end
-		m.set("haxe", "1");
-		m.set("true", "1");
-		m.set("false", "0");
-		return m;
-	}
-	#end
-
 	public function new(?scriptPath:String = "", ?preset:Bool = true, ?startExecute:Bool = true) {
 		var time = Timer.stamp();
-
-		if (defines == null)
-			defines = defaultDefines.copy();
 
 		if (defaultTypeCheck != null)
 			typeCheck = defaultTypeCheck;

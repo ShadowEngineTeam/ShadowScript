@@ -1,7 +1,7 @@
 ShadowScript
 =======
 
-Just a fork of hscript-improved to have SScript class (ver 7.0.0) so we could use it in Shadow Engine.<br>
+Just a fork of hscript-improved to have SScript class (ver 7.7.0) so we could use it in Shadow Engine.<br>
 This fork licensed under MIT and see OG README down below.
 
 hscript-improved

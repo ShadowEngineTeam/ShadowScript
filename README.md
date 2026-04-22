@@ -11,7 +11,7 @@ hscript-improved
 
 How to install
 ```
-haxelib git hscript-improved https://github.com/ShadowEngineTeam/SScript-improved.git
+haxelib git hscript-improved https://github.com/ShadowEngineTeam/ShadowScript.git
 ```
 
 To enable custom classes support you have to do this in project.xml

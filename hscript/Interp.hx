@@ -167,8 +167,8 @@ class Interp {
 	];
 
 	var usingHandler:UsingHandler;
-
-var script:SScript;
+	
+	var script:SScript;
 	public var specialObject:{obj:Dynamic, ?includeFunctions:Bool, ?exclusions:Array<String>} = {obj: null, includeFunctions: null, exclusions: null};
 
 	public inline function setScr(s:SScript) {

@@ -151,12 +151,13 @@ class Macro {
 			case EField(e, f):
 				EField(convert(e), f);
 			case EBinop(op, e1, e2):
-				var b = binops.get(op);
-				if( b == null ) throw EInvalidOp(op);
+				var b = binops.get(op.toString());
+				if( b == null ) throw EInvalidOp(op.toString());
 				EBinop(b, convert(e1), convert(e2));
 			case EUnop(op, prefix, e):
-				var u = unops.get(op);
-				if( u == null ) throw EInvalidOp(op);
+				var opStr = op.toString();
+				var u = unops.get(opStr);
+				if( u == null ) throw EInvalidOp(opStr);
 				EUnop(u, !prefix, convert(e));
 			case ECall(e, params):
 				ECall(convert(e), map(params, convert));

@@ -437,6 +437,8 @@ class SScript {
 			return;
 
 		interp.locals = new Map();
+		while (interp.declared.length > 0)
+			interp.declared.pop();
 	}
 
 	function doFile(scriptPath:String):Void {

@@ -11,6 +11,8 @@ import haxe.macro.Compiler;
 using StringTools;
 
 class AbstractHandler {
+	public static var modifiedClasses:Array<String> = [];
+
 	public static function init() {
 		#if HSCRIPT_ABSTRACT_SUPPORT
 		#if !display
@@ -44,6 +46,11 @@ class AbstractHandler {
 			if(key == "cpp.CharStar") return fields; // Error: cannot initialize a variable of type 'char *' with an rvalue of type 'const char *', Due to Func
 			if(Config.DISALLOW_ABSTRACT_AND_ENUM.contains(cl.module) || Config.DISALLOW_ABSTRACT_AND_ENUM.contains(fkey)) return fields;
 			if(cl.module.contains("_")) return fields; // Weird issue, sorry
+
+			var fqName = cl.module + "." + cl.name;
+            if (modifiedClasses.contains(fqName))
+				return fields;
+            modifiedClasses.push(fqName);
 
 			var shadowClass = macro class {
 

@@ -67,6 +67,11 @@ class ClassExtendMacro {
 			if(Config.DISALLOW_CUSTOM_CLASSES.contains(cl.module) || Config.DISALLOW_CUSTOM_CLASSES.contains(fkey)) return fields;
 			if(cl.module.contains("_")) return fields; // Weird issue, sorry
 
+			var fqName = cl.module + "." + cl.name;
+			if (modifiedClasses.contains(fqName))
+				return fields;
+			modifiedClasses.push(fqName);
+
 			var superFields = [];
 			if(false && cl.superClass != null) {
 				var _superFields = cl.superClass.t.get().fields.get();
@@ -342,6 +347,8 @@ class ClassExtendMacro {
 				{name: "IHScriptCustomClassBehaviour", pack: ["hscript"]}
 			], false, true, false);
 			shadowClass.name = '${cl.name}$CLASS_SUFFIX';
+			// really not good solution
+			// shadowClass.meta = [{ name: ":nullSafety", params: [macro Off], pos: Context.currentPos() }];
 			var imports = Context.getLocalImports().copy();
 			Utils.setupMetas(shadowClass, imports);
 			Utils.processImport(imports, "hscript.utils.UnsafeReflect", "UnsafeReflect");

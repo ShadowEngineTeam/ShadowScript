@@ -34,6 +34,7 @@ class ClassExtendMacro {
 		#end
 	}
 
+	@:haxe.warning("-WDeprecated")
 	public static function build():Array<Field> {
 		var fields = Context.getBuildFields();
 		var clRef = Context.getLocalClass();
@@ -307,6 +308,7 @@ class ClassExtendMacro {
 							doc: f.doc,
 							meta: f.meta.copy()
 						};
+						overrideField.meta.push({name: ":haxe.warning", params: [macro "-WDeprecated"], pos: Context.currentPos()});
 
 						if (!overrideField.access.contains(AOverride))
 							overrideField.access.push(AOverride);
@@ -320,7 +322,8 @@ class ClassExtendMacro {
 								expr: superFuncExpr,
 								args: fun.args.copy()
 							}),
-							access: f.access.copy()
+							access: f.access.copy(),
+							meta: [{name: ":haxe.warning", params: [macro "-WDeprecated"], pos: Context.currentPos()}]
 						};
 						if (superField.access.contains(AOverride))
 							superField.access.remove(AOverride);

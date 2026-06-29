@@ -5,6 +5,8 @@ import hscript.Tools;
 import hscript.Async;
 import hscript.Printer;
 import hscript.Checker;
+import hscript.Parser;
+import hscript.Interp;
 import haxe.unit.*;
 
 class TestHScript extends TestCase {
@@ -291,6 +293,76 @@ class TestHScript extends TestCase {
 				case [x,y]: Std.string(x) + y;
 			}
 		", "1two", null, true);
+	}
+
+	function testAbstractMethods():Void {
+		// Method with single param
+		assertScript("
+			abstract Calc(Int) {
+				public function new(v) __value__ = v;
+				public function triple(v) v * 3;
+			}
+			var c = new Calc(5);
+			c.triple(4);
+		", 12);
+		// Method with multiple params
+		assertScript("
+			abstract Calc(Int) {
+				public function new(v) __value__ = v;
+				public function add(a,b) a + b;
+			}
+			var c = new Calc(0);
+			c.add(10, 20);
+		", 30);
+		// Two instances calling methods
+		assertScript("
+			abstract Box(Int) {
+				public function new(v) __value__ = v;
+				public function mul(a) a * 2;
+			}
+			var a = new Box(1);
+			var b = new Box(2);
+			a.mul(5) + b.mul(10);
+		", 30);
+		// Method on different abstracts
+		assertScript("
+			abstract A(Int) {
+				public function new(v) __value__ = v;
+				public function ident(v) v;
+			}
+			abstract B(String) {
+				public function new(v) __value__ = v;
+				public function greet(v) 'hello ' + v;
+			}
+			var a = new A(99);
+			var b = new B('world');
+			a.ident(42) == 42 && b.greet('x') == 'hello x';
+		", true);
+	}
+
+	function testMetadataUtilities():Void {
+		// Metadata stored and retrievable via getMetas/getMeta
+		var p = new Parser();
+		var interp = new Interp();
+		var ast = p.parseString("@:keep @:deprecated('v1') {x: 1}");
+		var obj = interp.execute(ast);
+		var metas = Interp.getMetas(obj);
+		assertEquals(2, metas.length);
+		assertEquals("deprecated", metas[0].name);
+		assertEquals("keep", metas[1].name);
+		assertEquals("v1", metas[0].params[0]);
+
+		var params = Interp.getMeta(obj, "deprecated");
+		assertEquals("v1", params[0]);
+
+		assertEquals(null, Interp.getMeta(obj, "nonexistent"));
+
+		// Metadata on null/primitive is silently dropped
+		p = new Parser();
+		interp = new Interp();
+		ast = p.parseString("@:keep 42;");
+		var n = interp.execute(ast);
+		assertEquals(null, Interp.getMetas(n));
 	}
 
 	static function main() {

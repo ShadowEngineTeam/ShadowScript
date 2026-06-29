@@ -1206,6 +1206,8 @@ class Interp {
 					error(ECustom("Property Accessor for local variables is not allowed"));
 					return null;
 				}
+				if(depth == 0 && variables.exists(n))
+					locals.set(n, {r: variables.get(n), depth: 0, isFinal: false});
 				declared.push({n: n, old: locals.get(n), depth: depth});
 				var r:Dynamic = (e == null) ? null : expr(e);
 				var declProp:Property = null;
@@ -1368,7 +1370,7 @@ class Interp {
 				while (_hasNext()) {
 					var k = _next();
 					var e = __capturedLocals.get(k);
-					if (e != null && e.depth > 0)
+					if (e != null)
 						capturedLocals.set(k, e);
 				}
 
@@ -1678,19 +1680,27 @@ class Interp {
 					val = def == null ? null : expr(def);
 				restore(old);
 				return val;
-		case EMeta(a, b, e):
+			case EMeta(a, b, e):
 				var oldAccessor = isBypassAccessor;
 				if(a == ":bypassAccessor") {
 					isBypassAccessor = true;
 				}
+				var metaName = (a.charCodeAt(0) == ':'.code) ? a.substr(1) : a;
 				var val = expr(e);
-				if(b != null && UnsafeReflect.isObject(val)) {
-					var metas:Array<Dynamic> = UnsafeReflect.field(val, "__metas");
-					if(metas == null) {
-						metas = [];
-						UnsafeReflect.setField(val, "__metas", metas);
-					}
-					metas.push({ name: a, params: b });
+				if(UnsafeReflect.isObject(val)) {
+					try {
+						var metas:Array<Dynamic> = UnsafeReflect.field(val, "__metas");
+						if(metas == null) {
+							metas = [];
+							UnsafeReflect.setField(val, "__metas", metas);
+						}
+						var metaParams:Array<Dynamic> = null;
+						if(b != null) {
+							metaParams = [];
+							for(p in b) metaParams.push(expr(p));
+						}
+						metas.push({ name: metaName, params: metaParams });
+					} catch(e:Dynamic) {}
 				}
 				isBypassAccessor = oldAccessor;
 				return val;

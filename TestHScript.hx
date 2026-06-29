@@ -206,13 +206,91 @@ class TestHScript extends TestCase {
 		", 42);
 	}
 
-	function testMetadata():Void {
-		// Metadata annotation on var (parse-only)
-		assertScript("@:keep var x = 5; x", 5);
-		// Metadata on function
-		assertScript("@:deprecated('use bar') function foo() return 1; foo()", 1);
-		// Multiple metadata
-		assertScript("@:keep @:noDebug var x = 1; x", 1);
+	function testPatternAdvanced():Void {
+		// Empty array match
+		assertScript("switch([]) { case []: 1; case _: 0; }", 1);
+		// Bool match
+		assertScript("switch(false) { case false: 1; case true: 2; }", 1);
+		// Null match
+		assertScript("switch(null) { case null: 1; case _: 0; }", 1);
+		// Float match
+		assertScript("switch(1.5) { case 1.5: 1; case _: 0; }", 1);
+		// Array in object pattern
+		assertScript("switch({a:[1,2]}) { case {a:[x,y]}: x + y; }", 3);
+		// Object in array pattern
+		assertScript("switch([{x:1},{x:2}]) { case [{x:a},{x:b}]: a + b; }", 3);
+		// Guard with or-pattern
+		assertScript("switch(5) { case x if x > 10: 100; case 1|3|5: 1; case _: 0; }", 1);
+		// Default case
+		assertScript("switch(99) { case 1: 0; case _: 1; }", 1);
+		// No default, no match
+		assertScript("switch(99) { case 1: 10; }", null);
+		// Multiple guards
+		assertScript("switch(15) { case x if x > 0 && x < 10: 1; case x if x >= 10 && x < 20: 2; case _: 0; }", 2);
+		// Variable binding preserved in body
+		assertScript("switch('world') { case x: 'hello ' + x; }", "hello world");
+		// Array with two elements only (not three)
+		assertScript("switch([1,2,3]) { case [a,b]: a + b; case _: 0; }", 0);
+		// Exact array length mismatch
+		assertScript("switch([1]) { case [a,b]: 0; case [a]: a; }", 1);
+	}
+
+	function testAbstractAdvanced():Void {
+		// Two different abstracts
+		assertScript("
+			abstract A(Int) {
+				public function new(v) __value__ = v;
+			}
+			abstract B(String) {
+				public function new(v) __value__ = v;
+			}
+			var a = new A(10);
+			var b = new B('hi');
+			a.__value__;
+		", 10);
+		// Two abstract instances
+		assertScript("
+			abstract Box(Int) {
+				public function new(v) __value__ = v;
+			}
+			var a = new Box(3);
+			var b = new Box(4);
+			a.__value__ + b.__value__;
+		", 7);
+	}
+
+	function testMetadataAdvanced():Void {
+		// Metadata with string arg
+		assertScript("@:deprecated('use newFunc') var x = 1; x", 1);
+		// Metadata on expression (no space ambiguity with args)
+		assertScript("@:keep 1 + 2", 3);
+		// Metadata chained
+		assertScript("@:a @:b @:c var x = 42; x", 42);
+		// Metadata on function expression
+		assertScript("var f = @:keep function() return 99; f()", 99);
+	}
+
+	function testCrossFeature():Void {
+		// Pattern matching with metadata-annotated values
+		assertScript("@:keep switch(42) { case x: x; }", 42);
+		// Abstract with pattern matching (direct __value__ access)
+		assertScript("
+			abstract Box(Int) {
+				public function new(v) __value__ = v;
+			}
+			var items = [new Box(1), new Box(2)];
+			switch(items) {
+				case [a,b]: a.__value__ + b.__value__;
+				case _: 0;
+			}
+		", 3);
+		// Type params with pattern matching
+		assertScript("
+			var pair = function<T,U>(a:T,b:U):Array<Dynamic> return [a,b];
+			switch(pair(1,'two')) {
+				case [x,y]: Std.string(x) + y;
+			}
+		", "1two", null, true);
 	}
 
 	static function main() {

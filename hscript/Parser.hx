@@ -1242,7 +1242,7 @@ class Parser {
 							push(tk);
 							var e = parseExpr();
 							functions.push(e);
-							break;
+							continue;
 						}
 						if(fieldName.trim().length != 0) {
 							error(ECustom("Expected comma or semicolon"), tokenMin, tokenMax);

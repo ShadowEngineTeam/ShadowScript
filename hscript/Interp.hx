@@ -635,10 +635,10 @@ class Interp {
 		return switch (tk) {
 			case EBinop(OpOr, e1, e2):
 				var saved = declared.length;
-				if (matchPatternValue(e1, val)) true;
+				if (matchOrPattern(e1, val)) true;
 				else {
 					restore(saved);
-					matchPatternValue(e2, val);
+					matchOrPattern(e2, val);
 				}
 			default:
 				matchPatternValue(e, val);
@@ -1184,6 +1184,7 @@ class Interp {
 						for(k in methods.keys())
 							UnsafeReflect.setField(instance, k, methods.get(k));
 						UnsafeReflect.setField(instance, "__value__", args.length > 0 ? args[0] : null);
+						if(ctor != null) Reflect.callMethod(null, ctor, args);
 						return instance;
 					}
 				};
@@ -1206,8 +1207,6 @@ class Interp {
 					error(ECustom("Property Accessor for local variables is not allowed"));
 					return null;
 				}
-				if(depth == 0 && variables.exists(n))
-					locals.set(n, {r: variables.get(n), depth: 0, isFinal: false});
 				declared.push({n: n, old: locals.get(n), depth: depth});
 				var r:Dynamic = (e == null) ? null : expr(e);
 				var declProp:Property = null;
@@ -1230,11 +1229,12 @@ class Interp {
 				if (depth == 0) {
 					varLocationCache.remove(n);
 					if(allowStaticVariables && isStatic == true) {
-						if(!staticVariables.exists(n)) // make it so it only sets it once
+						if(!staticVariables.exists(n))
 							staticVariables.set(n, locals[n].r);
 					} else if(allowPublicVariables && isPublic == true) {
-						publicVariables.set(n, locals[n].r);
-					} else {
+						if(!publicVariables.exists(n))
+							publicVariables.set(n, locals[n].r);
+					} else if(!variables.exists(n)) {
 						variables.set(n, locals[n].r);
 					}
 				}

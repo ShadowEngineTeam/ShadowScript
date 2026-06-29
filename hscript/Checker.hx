@@ -1264,17 +1264,15 @@ class Checker {
 				mergeType( typeExpr(defaultExpr, withType), defaultExpr);
 			return withType == NoValue ? TVoid : tmin == null ? makeMono() : tmin;
 		case ENew(cl, params):
-		case EInterface(_,_,_):
-		case EAbstract(_,_,_):
+		case EInterface(_,_,_) | EAbstract(_,_,_) | ETypedef(_,_) | EPackage(_):
+			return TVoid;
 		case EUntyped(e):
 			typeExpr(e, withType);
 			return TDynamic;
-		case ETypedef(_,_):
 		case ECast(e, _):
 			return typeExpr(e, withType);
 		case ERegex(_,_):
 			return types.getType("EReg", []);
-		case EPackage(_):
 		default:
 		}
 		error("Don't know how to type "+edef(expr).getName(), expr);

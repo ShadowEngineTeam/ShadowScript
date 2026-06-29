@@ -407,7 +407,7 @@ class Bytes {
 		case 28:
 			var c = doDecodeString();
 			var a = doDecodeString();
-			doDecode(); EImport(c, a, false, false);
+			EImport(c, a, false, false);
 		case 29:
 			EClass(doDecodeString(), [for(i in 0...bin.get(pin++)) doDecode()], doDecodeString(), []);
 		case 30:

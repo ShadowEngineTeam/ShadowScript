@@ -125,16 +125,30 @@ class Bytes {
 		bout.addByte(Type.enumIndex(e));
 		switch( e ) {
 		case EPackage(n):
-			// TODO
-		case EImport(c, _, _, _):
-			// TODO
+			doEncodeString(n == null ? "" : n);
+		case EImport(c, a, _, _):
+			doEncodeString(c);
+			doEncodeString(a == null ? "" : a);
+		case ECast(e, _):
+			doEncode(e);
+		case ERegex(e, f):
+			doEncodeString(e);
+			doEncodeString(f);
 		case EClass(_, _, _, _):
 			// TODO
+		case EInterface(_, _, _):
+			// TODO
 		case EEnum(en):
+			doEncodeString(en.name);
+			bout.addByte(en.fields.length);
+			for(f in en.fields) doEncodeString(f.name);
+		case ETypedef(name, t):
 			// TODO
-		case ECast(e, _):
-			// TODO
-		case ERegex(e, f):
+		case EAbstract(name, _, fields):
+			doEncodeString(name);
+			bout.addByte(fields.length);
+			for(f in fields) doEncode(f);
+		case EUntyped(e):
 			// TODO
 		case EConst(c):
 			doEncodeConst(c);
@@ -212,10 +226,13 @@ class Bytes {
 				doEncode(e);
 		case EThrow(e):
 			doEncode(e);
-		case ETry(e,v,_,ecatch):
+		case ETry(e, catches):
 			doEncode(e);
-			doEncodeString(v);
-			doEncode(ecatch);
+			bout.addByte(catches.length);
+			for(c in catches) {
+				doEncodeString(c.v);
+				doEncode(c.expr);
+			}
 		case EObject(fl):
 			bout.addByte(fl.length);
 			for( f in fl ) {
@@ -233,6 +250,9 @@ class Bytes {
 				for( v in c.values )
 					doEncode(v);
 				bout.addByte(255);
+				var hasGuard = c.guard != null;
+				bout.addByte(hasGuard ? 254 : 255);
+				if(hasGuard) doEncode(c.guard);
 				doEncode(c.expr);
 			}
 			bout.addByte(255);
@@ -333,8 +353,14 @@ class Bytes {
 			EThrow(doDecode());
 		case 20:
 			var e = doDecode();
-			var v = doDecodeString();
-			ETry(e,v,null,doDecode());
+			var numCatches = bin.get(pin++);
+			var catches:Array<CatchBlock> = [];
+			for(_ in 0...numCatches) {
+				var v = doDecodeString();
+				var ec = doDecode();
+				catches.push({ v: v, t: null, expr: ec });
+			}
+			ETry(e, catches);
 		case 21:
 			var fl:Array<ObjectField> = [];
 			for( i in 0...bin.get(pin++) ) {
@@ -360,7 +386,9 @@ class Bytes {
 					if( v == null ) break;
 					values.push(v);
 				}
-				cases.push( { values : values, expr : doDecode() } );
+				var guardMarker = bin.get(pin++);
+				var guard:Null<Expr> = (guardMarker == 254) ? doDecode() : null;
+				cases.push( { values : values, expr : doDecode(), guard : guard } );
 			}
 			var def = doDecode();
 			ESwitch(e, cases, def);
@@ -374,6 +402,35 @@ class Bytes {
 			EMeta(name, args, doDecode());
 		case 26:
 			ECheckType(doDecode(), CTPath(["Void"]));
+		case 27:
+			EPackage(doDecodeString());
+		case 28:
+			var c = doDecodeString();
+			var a = doDecodeString();
+			doDecode(); EImport(c, a, false, false);
+		case 29:
+			EClass(doDecodeString(), [for(i in 0...bin.get(pin++)) doDecode()], doDecodeString(), []);
+		case 30:
+			EInterface(doDecodeString(), [for(i in 0...bin.get(pin++)) doDecode()], [doDecodeString()]);
+		case 31:
+			var enumName = doDecodeString();
+			var fieldCount = bin.get(pin++);
+			var enumFields:Array<EnumField> = [];
+			for(_ in 0...fieldCount)
+				enumFields.push({ name: doDecodeString(), args: [], value: null });
+			EEnum({ name: enumName, fields: enumFields, underlyingType: null, functions: null });
+		case 32:
+			ETypedef(doDecodeString(), CTPath(["Void"]));
+		case 33:
+			var name = doDecodeString();
+			var fields = [for(i in 0...bin.get(pin++)) doDecode()];
+			EAbstract(name, null, fields);
+		case 34:
+			ECast(doDecode(), null);
+		case 35:
+			ERegex(doDecodeString(), doDecodeString());
+		case 36:
+			EUntyped(doDecode());
 		case 255:
 			null;
 		default:

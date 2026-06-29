@@ -35,6 +35,8 @@ class Tools {
 		case EConst(_), EIdent(_):
 		case EImport(c, _, _, _): f(e);
 		case EClass(_, e, _, _): for( a in e ) f(a);
+		case EInterface(_, fields, _): for( a in fields ) f(a);
+		case EAbstract(_, _, fields): for( a in fields ) f(a);
 		case EVar(_, _, e): if( e != null ) f(e);
 		case EParent(e): f(e);
 		case EBlock(el): for( e in el ) f(e);
@@ -53,18 +55,21 @@ class Tools {
 		case EArrayDecl(el): for( e in el ) f(e);
 		case ENew(_,el): for( e in el ) f(e);
 		case EThrow(e): f(e);
-		case ETry(e, _, _, c): f(e); f(c);
+		case ETry(e, catches): f(e); for(c in catches) f(c.expr);
 		case EObject(fl): for( fi in fl ) f(fi.e);
 		case ETernary(c, e1, e2): f(c); f(e1); f(e2);
 		case ESwitch(e, cases, def):
 			f(e);
 			for( c in cases ) {
 				for( v in c.values ) f(v);
+				if(c.guard != null) f(c.guard);
 				f(c.expr);
 			}
 			if( def != null ) f(def);
 		case EMeta(name, args, e): if( args != null ) for( a in args ) f(a); f(e);
 		case ECheckType(e,_): f(e);
+		case ETypedef(_, _):
+		case EUntyped(e): f(e);
 		default:
 		}
 	}
@@ -89,14 +94,18 @@ class Tools {
 		case EArrayDecl(el): EArrayDecl([for( e in el ) f(e)]);
 		case ENew(cl,el): ENew(cl,[for( e in el ) f(e)]);
 		case EThrow(e): EThrow(f(e));
-		case ETry(e, v, t, c): ETry(f(e), v, t, f(c));
+		case ETry(e, catches): ETry(f(e), [for(c in catches) { v: c.v, t: c.t, expr: f(c.expr) }]);
 		case EObject(fl): EObject([for( fi in fl ) { name : fi.name, e : f(fi.e) }]);
 		case ETernary(c, e1, e2): ETernary(f(c), f(e1), f(e2));
-		case ESwitch(e, cases, def): ESwitch(f(e), [for( c in cases ) { values : [for( v in c.values ) f(v)], expr : f(c.expr) } ], def == null ? null : f(def));
+		case ESwitch(e, cases, def): ESwitch(f(e), [for( c in cases ) { values : [for( v in c.values ) f(v)], expr : f(c.expr), guard : c.guard != null ? f(c.guard) : null } ], def == null ? null : f(def));
 		case EMeta(name, args, e): EMeta(name, args == null ? null : [for( a in args ) f(a)], f(e));
 		case ECheckType(e,t): ECheckType(f(e), t);
 		case EImport(c, n, u, s): EImport(c, n, u, s);
 		case EClass(name, el, extend, interfaces): EClass(name, [for( e in el ) f(e)], extend, interfaces);
+		case EInterface(name, fields, extend): EInterface(name, [for( e in fields ) f(e)], extend);
+		case EAbstract(name, t, fields): EAbstract(name, t, [for( e in fields ) f(e)]);
+		case ETypedef(name, t): ETypedef(name, t);
+		case EUntyped(e): EUntyped(f(e));
 		default: expr(e);
 		}
 		return mk(edef, e);

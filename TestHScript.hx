@@ -156,6 +156,65 @@ class TestHScript extends TestCase {
 		assertScript('var newMap = [{a:"a"}=>"foo", objKey=>"bar"]; newMap[objKey];', 'bar', vars);
 	}
 
+	function testPatternMatching():Void {
+		// Literal match
+		assertScript("switch(2) { case 1: 10; case 2: 20; }", 20);
+		// Wildcard
+		assertScript("switch('hello') { case _: 99; }", 99);
+		// Variable binding
+		assertScript("switch(42) { case x: x + 1; }", 43);
+		// Array destructuring
+		assertScript("switch([1,2,3]) { case [a,b,c]: a + b + c; }", 6);
+		// Array with wildcard
+		assertScript("switch([10,20,30]) { case [a,_,_]: a; }", 10);
+		// Nested array pattern
+		assertScript("switch([[1,2],[3,4]]) { case [[a,b],_]: a + b; }", 3);
+		// Object pattern
+		assertScript("switch({x:1,y:2}) { case {x:a,y:b}: a + b; }", 3);
+		// Guard with binding
+		assertScript("switch(10) { case x if x > 5: x * 2; }", 20);
+		// Guard no match
+		assertScript("switch(2) { case x if x > 5: 100; case _: 0; }", 0);
+		// Guard match on second
+		assertScript("switch(2) { case x if x > 5: 100; case x: x; }", 2);
+		// Or pattern
+		assertScript("switch(3) { case 1|3|5: true; case _: false; }", true);
+		// Or pattern no match
+		assertScript("switch(2) { case 1|3|5: true; case _: false; }", false);
+		// String literal match
+		assertScript("switch('foo') { case 'bar': 0; case 'foo': 1; case _: 2; }", 1);
+		// First-match semantics
+		assertScript("switch(1) { case 1: 10; case 1: 20; }", 10);
+	}
+
+	function testTypeParams():Void {
+		// Type parameter with constraint (consumed at parse time, no runtime effect)
+		assertScript("var f = function<T:Int>(x:T):T return x; f(5)", 5, null, true);
+		assertScript("var f = function<T:Float>(x:T):T return x; f(1.5)", 1.5, null, true);
+		// Multiple type params
+		assertScript("var f = function<T,U>(x:T,y:U):T return x; f(1,'a')", 1, null, true);
+	}
+
+	function testAbstract():Void {
+		// Basic abstract with constructor, verify __value__ is set
+		assertScript("
+			abstract MyInt(Int) {
+				public function new(v) __value__ = v;
+			}
+			var x = new MyInt(42);
+			x.__value__;
+		", 42);
+	}
+
+	function testMetadata():Void {
+		// Metadata annotation on var (parse-only)
+		assertScript("@:keep var x = 5; x", 5);
+		// Metadata on function
+		assertScript("@:deprecated('use bar') function foo() return 1; foo()", 1);
+		// Multiple metadata
+		assertScript("@:keep @:noDebug var x = 1; x", 1);
+	}
+
 	static function main() {
 		#if ((haxe_ver < 4) && php)
 		// uncaught exception: The each() function is deprecated. This message will be suppressed on further calls (errno: 8192)

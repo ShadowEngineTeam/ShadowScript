@@ -73,6 +73,7 @@ enum abstract VarLocation(UInt8) {
 class DeclaredVar {
 	public var r:Dynamic;
 	public var depth:Int;
+	public var isFinal:Bool;
 }
 
 @:structInit
@@ -256,10 +257,12 @@ class Interp {
 	function assign(e1:Expr, e2:Expr):Dynamic {
 		var v = expr(e2);
 		switch (Tools.expr(e1)) {
-			case EIdent(id):
-				var l = locals.get(id);
-				if (l == null) {
-					if (hasScriptObject && !varExists(id)) {
+		case EIdent(id):
+			var l = locals.get(id);
+			if (l != null && l.isFinal)
+				return error(ECustom('Cannot reassign final variable $id'));
+			if (l == null) {
+				if (hasScriptObject && !varExists(id)) {
 						var instanceHasField = __instanceFields.contains(id);
 
 						if (_scriptObjectType == SObject && instanceHasField) {
@@ -338,6 +341,8 @@ class Interp {
 		switch (Tools.expr(e1)) {
 			case EIdent(id):
 				var l = locals.get(id);
+				if (l != null && l.isFinal)
+					return error(ECustom('Cannot reassign final variable $id'));
 				v = fop(expr(e1), expr(e2));
 				if (l == null) {
 					if(hasScriptObject && !varExists(id)) {
@@ -429,6 +434,8 @@ class Interp {
 			case EIdent(id):
 				var l = locals.get(id);
 				if(l != null) {
+					if(l.isFinal)
+						return error(ECustom('Cannot increment final variable $id'));
 					var v:Dynamic = l.r;
 					var prop:Property = null;
 					if (v is Property) {
@@ -577,6 +584,77 @@ class Interp {
 			var d = declared.pop();
 			locals.set(d.n, d.old);
 		}
+	}
+
+	function matchPatternValue(p:Expr, v:Dynamic):Bool {
+		return switch (Tools.expr(p)) {
+			case EIdent("_"): true;
+			case EIdent(n):
+				declared.push({n: n, old: locals.get(n), depth: depth});
+				locals.set(n, {r: v, depth: depth, isFinal: false});
+				true;
+			case EConst(CInt(i)): v == i;
+			case EConst(CFloat(f)): v == f;
+			case EConst(CString(s)): v == s;
+			case EArrayDecl(elements):
+				if (!(v is Array)) return false;
+				return matchArrayPattern(cast v, elements);
+			case EObject(fields):
+				return matchObjectPattern(v, fields);
+			default:
+				expr(p) == v;
+		}
+	}
+
+	function matchArrayPattern(val:Array<Dynamic>, elements:Array<Expr>):Bool {
+		if (val.length != elements.length) return false;
+		var saved = declared.length;
+		for (i in 0...elements.length) {
+			if (!matchPatternValue(elements[i], val[i])) {
+				restore(saved);
+				return false;
+			}
+		}
+		return true;
+	}
+
+	function matchObjectPattern(val:Dynamic, fields:Array<ObjectField>):Bool {
+		var saved = declared.length;
+		for (f in fields) {
+			var fieldVal = Reflect.field(val, f.name);
+			if (!matchPatternValue(f.e, fieldVal)) {
+				restore(saved);
+				return false;
+			}
+		}
+		return true;
+	}
+
+	function matchOrPattern(e:Expr, val:Dynamic):Bool {
+		var tk = Tools.expr(e);
+		return switch (tk) {
+			case EBinop(OpOr, e1, e2):
+				var saved = declared.length;
+				if (matchPatternValue(e1, val)) true;
+				else {
+					restore(saved);
+					matchPatternValue(e2, val);
+				}
+			default:
+				matchPatternValue(e, val);
+		}
+	}
+
+	public static function getMetas(val:Dynamic):Array<Dynamic> {
+		return UnsafeReflect.field(val, "__metas");
+	}
+
+	public static function getMeta(val:Dynamic, name:String):Dynamic {
+		var metas = getMetas(val);
+		if(metas == null) return null;
+		for(m in metas)
+			if(m.name == name) return m.params;
+		return null;
 	}
 
 	public inline function error(e:#if hscriptPos ErrorDef #else Error #end, rethrow = false):Dynamic {
@@ -952,24 +1030,27 @@ class Interp {
 					}
 					var enumName = en.name;
 					var enumFields = en.fields;
-					// TODO: incremental implicit int value from previous value
-					// i.e.
-					/*
-					enum abstract Numeric(Int) {
-						var Zero; // implicit value: 0
-						var Ten = 10;
-						var Eleven; // implicit value: 11
-					}
-					*/
+					var lastValue:Dynamic = null;
 					for (i => ef in enumFields) {
 						var fieldName = ef.name;
-						var fieldValue:Dynamic = ef.value != null ? expr(ef.value) : switch(enumType) {
-							case 'Int': i;
-							case 'String': fieldName;
-							default: null;
+						var fieldValue:Dynamic;
+						if(ef.value != null) {
+							fieldValue = expr(ef.value);
+							if(enumType == 'Int' && Std.isOfType(fieldValue, Int))
+								lastValue = fieldValue;
+						} else {
+							fieldValue = switch(enumType) {
+								case 'Int':
+									lastValue = lastValue != null ? Std.int(lastValue) + 1 : 0;
+									lastValue;
+								case 'String': fieldName;
+								default: null;
+							}
 						}
-						//var fieldValue:Dynamic = ef.value != null ? exprReturn(ef.value) : i;
 						UnsafeReflect.setField(enumObj, fieldName, fieldValue);
+					}
+					if(en.functions != null) {
+						for(fn in en.functions) expr(fn);
 					}
 					variables.set(enumName, enumObj);
 				} else {
@@ -1036,6 +1117,79 @@ class Interp {
 
 					variables.set(en.name, enumThingy);
 				}
+		case EInterface(name, fields, extend):
+				var iface:Dynamic = {};
+				for(f in fields) {
+					var fe = Tools.expr(f);
+					switch(fe) {
+						case EVar(n, _, _, _, _, _, _, _, _, _, _):
+							Reflect.setField(iface, n, null);
+						case EFunction(_, _, fname, _):
+							var fnObj = expr(f);
+							if(fnObj != null && fname != null)
+								Reflect.setField(iface, fname, fnObj);
+						default:
+							expr(f);
+					}
+				}
+				variables.set(name, iface);
+				return null;
+			case EUntyped(e):
+				return expr(e);
+		case ETypedef(name, t):
+				switch(t) {
+					case CTPath(path, _):
+						var fullPath = path.join(".");
+						var cl = Type.resolveClass(fullPath);
+						if(cl != null) {
+							variables.set(name, cl);
+						} else {
+							var en = Type.resolveEnum(fullPath);
+							if(en != null) {
+								var enumThingy:HEnum = {};
+								for(c in en.getConstructors()) {
+									try {
+										enumThingy.setEnum(c, en.createByName(c));
+									} catch(e) {
+										try {
+											enumThingy.setEnum(c, UnsafeReflect.field(en, c));
+										} catch(ex) {
+											throw e;
+										}
+									}
+								}
+								variables.set(name, enumThingy);
+							}
+						}
+					default:
+				}
+				return null;
+			case EAbstract(name, underlyingType, fields):
+				var methods:Map<String, Dynamic> = new Map();
+				var ctor:Dynamic = null;
+				for(f in fields) {
+					var fe = Tools.expr(f);
+					switch(fe) {
+						case EFunction(_, _, fname, _):
+							var fnObj = expr(f);
+							if(fname == "new") ctor = fnObj;
+							else methods.set(fname, fnObj);
+						default:
+							expr(f);
+					}
+				}
+				var absObj = {
+					hnew: function(args:Array<Dynamic>):Dynamic {
+						var instance:Dynamic = {};
+						for(k in methods.keys())
+							UnsafeReflect.setField(instance, k, methods.get(k));
+						UnsafeReflect.setField(instance, "__value__", args.length > 0 ? args[0] : null);
+						return instance;
+					}
+				};
+				if(depth == 0) variables.set(name, absObj);
+				else locals.set(name, {r: absObj, depth: depth, isFinal: false});
+				return null;
 			case ERegex(e, f):
 				return new EReg(e, f);
 			case EConst(c):
@@ -1067,7 +1221,8 @@ class Interp {
 				}
 				var declVar:DeclaredVar = {
 					r: (!hasGetSet) ? r : declProp,
-					depth: depth
+					depth: depth,
+					isFinal: isFinal == true
 				};
 				locals.set(n, declVar);
 				if (depth == 0) {
@@ -1253,7 +1408,7 @@ class Interp {
 					me.depth++;
 					me.locals = me.duplicate(capturedLocals);
 					for (i in 0...params.length)
-						me.locals.set(params[i].name, {r: args[i], depth: depth});
+						me.locals.set(params[i].name, {r: args[i], depth: depth, isFinal: false});
 					var r:Null<Dynamic> = null;
 					var oldDecl:Int = declared.length;
 					if (inTry)
@@ -1289,7 +1444,7 @@ class Interp {
 					} else {
 						// function-in-function is a local function
 						declared.push({n: name, old: locals.get(name), depth: depth});
-						var ref:DeclaredVar = {r: f, depth: depth};
+						var ref:DeclaredVar = {r: f, depth: depth, isFinal: false};
 						locals.set(name, ref);
 						capturedLocals.set(name, ref); // allow self-recursion
 					}
@@ -1394,7 +1549,7 @@ class Interp {
 				return cnew(cl, a);
 			case EThrow(e):
 				throw expr(e);
-			case ETry(e, n, _, ecatch):
+			case ETry(e, catches):
 				var old:Int = declared.length;
 				var oldTry = inTry;
 				try {
@@ -1407,15 +1562,25 @@ class Interp {
 					inTry = oldTry;
 					throw err;
 				} catch (err:Dynamic) {
-					// restore vars
 					restore(old);
 					inTry = oldTry;
-					// declare 'v'
-					declared.push({n: n, old: locals.get(n), depth: depth});
-					locals.set(n, {r: err, depth: depth});
-					var v:Dynamic = expr(ecatch);
-					restore(old);
-					return v;
+					for(c in catches) {
+						if(c.t != null) {
+							var typeName = switch(c.t) {
+								case CTPath(path, _): path.join(".");
+								default: null;
+							}
+							var catchType = typeName != null ? Type.resolveClass(typeName) : null;
+							if(catchType != null && !Std.isOfType(err, catchType))
+								continue;
+						}
+						declared.push({n: c.v, old: locals.get(c.v), depth: depth});
+						locals.set(c.v, {r: err, depth: depth, isFinal: false});
+						var v:Dynamic = expr(c.expr);
+						restore(old);
+						return v;
+					}
+					throw err;
 				}
 			case EObject(fl):
 				var o = {};
@@ -1429,6 +1594,7 @@ class Interp {
 				var val:Dynamic = expr(e);
 				var match = false;
 				for (c in cases) {
+					var caseOld = declared.length;
 					for (v in c.values) {
 						// https://github.com/FunkinCrew/polymod/blob/5d47a5c7c6b4e0cb94bd8fd45d012ca93bde9ab7/polymod/hscript/_internal/Interp.hx#L613
 						switch (Tools.expr(v)) {
@@ -1454,10 +1620,10 @@ class Interp {
 													case EIdent(n):
 														declared.push({
 															n: n,
-															old: {r: locals.get(n), depth: depth},
+															old: locals.get(n),
 															depth: depth
 														});
-														locals.set(n, {r: valParams[i], depth: depth});
+														locals.set(n, {r: valParams[i], depth: depth, isFinal: false});
 													default:
 												}
 											}
@@ -1466,6 +1632,27 @@ class Interp {
 										}
 									default:
 								}
+							case EArrayDecl(elements):
+								if (val is Array) {
+									match = matchArrayPattern(cast val, elements);
+								}
+								if (match) break;
+							case EObject(fields):
+								if (val is Dynamic && !(val is Array) && !(val is String) && !(val is Bool) && !(val is Int) && !(val is Float)) {
+									match = matchObjectPattern(val, fields);
+								}
+								if (match) break;
+							case EIdent("_"):
+								match = true;
+								break;
+							case EIdent(n):
+								declared.push({n: n, old: locals.get(n), depth: depth});
+								locals.set(n, {r: val, depth: depth, isFinal: false});
+								match = true;
+								break;
+							case EBinop(OpOr, _, _):
+								match = matchOrPattern(v, val);
+								break;
 							default:
 								if (expr(v) == val) {
 									match = true;
@@ -1475,6 +1662,14 @@ class Interp {
 					}
 					
 					if (match) {
+						if(c.guard != null) {
+							if(!expr(c.guard)) {
+								match = false;
+								restore(caseOld);
+							}
+						}
+					}
+					if (match) {
 						val = expr(c.expr);
 						break;
 					}
@@ -1483,13 +1678,20 @@ class Interp {
 					val = def == null ? null : expr(def);
 				restore(old);
 				return val;
-			case EMeta(a, b, e):
+		case EMeta(a, b, e):
 				var oldAccessor = isBypassAccessor;
 				if(a == ":bypassAccessor") {
 					isBypassAccessor = true;
 				}
 				var val = expr(e);
-
+				if(b != null && UnsafeReflect.isObject(val)) {
+					var metas:Array<Dynamic> = UnsafeReflect.field(val, "__metas");
+					if(metas == null) {
+						metas = [];
+						UnsafeReflect.setField(val, "__metas", metas);
+					}
+					metas.push({ name: a, params: b });
+				}
 				isBypassAccessor = oldAccessor;
 				return val;
 			case ECheckType(e, _), ECast(e, _):
@@ -1583,8 +1785,8 @@ class Interp {
 		while (_hasNext()) {
 			var next = _next();
 			if(isKeyValue)
-				locals.set(ithv, {r: next.key, depth: depth});
-			locals.set(n, {r: isKeyValue ? next.value : next, depth: depth});
+				locals.set(ithv, {r: next.key, depth: depth, isFinal: false});
+			locals.set(n, {r: isKeyValue ? next.value : next, depth: depth, isFinal: false});
 			if (!loopRun(() -> expr(e)))
 				break;
 		}
@@ -1884,7 +2086,8 @@ class Interp {
 			c = resolve(cl);
 		if (c is IHScriptCustomConstructor)
 			return cast(c, IHScriptCustomConstructor).hnew(args);
-		
+		if(UnsafeReflect.isObject(c) && Reflect.isFunction(c.hnew))
+			return c.hnew(args);
 		return Type.createInstance(c, args);
 	}
 }

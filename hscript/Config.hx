@@ -12,6 +12,11 @@ class Config {
 		"openfl.display.BlendMode",
 	];
 
+	// Runs support for typedef support in these
+	public static final ALLOWED_TYPEDEFS = [
+		"flixel",
+	];
+
 	// Incase any of your files fail
 	// These are the module names
 	public static final DISALLOW_CUSTOM_CLASSES = [
@@ -19,6 +24,10 @@ class Config {
 	];
 
 	public static final DISALLOW_ABSTRACT_AND_ENUM = [
+
+	];
+
+	public static final DISALLOW_TYPEDEFS = [
 
 	];
 }

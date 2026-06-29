@@ -139,12 +139,36 @@ class Printer {
 			for( e in fields ) {
 				add(tabs);
 				expr(e);
-				//add(";\n");
 			}
-			//for(field in fields) {
-			//	expr(field);
-			//}
 
+			tabs = tabs.substr(1);
+			add("}");
+		case EInterface(name, fields, extend):
+			add('interface $name');
+			if (extend != null && extend.length > 0) {
+				add(' extends ${extend.join(", ")}');
+			}
+			tabs += "\t";
+			add(" {\n");
+			for(e in fields) {
+				add(tabs);
+				expr(e);
+			}
+			tabs = tabs.substr(1);
+			add("}");
+		case EAbstract(name, t, fields):
+			add('abstract $name');
+			if( t != null ) {
+				add('(');
+				type(t);
+				add(')');
+			}
+			tabs += "\t";
+			add(" {\n");
+			for(e in fields) {
+				add(tabs);
+				expr(e);
+			}
 			tabs = tabs.substr(1);
 			add("}");
 		case EEnum(en, isAbstract):
@@ -199,6 +223,12 @@ class Printer {
 				tabs = tabs.substr(1);
 				add("}");
 			}
+		case ETypedef(name, t):
+			add('typedef $name = ');
+			addType(t);
+		case EUntyped(e):
+			add('untyped ');
+			expr(e);
 		case ECast(e, t):
 			var safe = t != null;
 			add("cast ");
@@ -391,13 +421,15 @@ class Printer {
 		case EThrow(e):
 			add("throw ");
 			expr(e);
-		case ETry(e, v, t, ecatch):
+		case ETry(e, catches):
 			add("try ");
 			expr(e);
-			add(" catch( " + v);
-			addType(t);
-			add(") ");
-			expr(ecatch);
+			for(c in catches) {
+				add(" catch(" + c.v);
+				if(c.t != null) addType(c.t);
+				add(") ");
+				expr(c.expr);
+			}
 		case EObject(fl):
 			if( fl.length == 0 ) {
 				add("{}");
@@ -429,6 +461,11 @@ class Printer {
 				for( v in c.values ) {
 					if( first ) first = false else add(", ");
 					expr(v);
+				}
+				if(c.guard != null) {
+					add(" if(");
+					expr(c.guard);
+					add(")");
 				}
 				add(": ");
 				expr(c.expr);

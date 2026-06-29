@@ -187,6 +187,7 @@ class Utils {
 			case ESwitch(e, cases, edef):
 				cleanExpr(e, oldFunc, newFunc);
 				for(c in cases) {
+					if(c.guard != null) cleanExpr(c.guard, oldFunc, newFunc);
 					cleanExpr(c.expr, oldFunc, newFunc);
 				}
 				cleanExpr(edef, oldFunc, newFunc);

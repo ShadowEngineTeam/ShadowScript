@@ -205,8 +205,8 @@ class Macro {
 				ENew( { pack : pack, name : pack.pop(), params : [], sub : null }, map(params, convert));
 			case EThrow(e):
 				EThrow(convert(e));
-			case ETry(e, v, t, ec):
-				ETry(convert(e), [ { type : convertType(t), name : v, expr : convert(ec) } ]);
+			case ETry(e, catches):
+				ETry(convert(e), [for(c in catches) { type : c.t != null ? convertType(c.t) : null, name : c.v, expr : convert(c.expr) }]);
 			case EObject(fields):
 				var tf = [];
 				for( f in fields )
@@ -215,7 +215,7 @@ class Macro {
 			case ETernary(cond, e1, e2):
 				ETernary(convert(cond), convert(e1), convert(e2));
 			case ESwitch(e, cases, edef):
-				ESwitch(convert(e), [for( c in cases ) { values : [for( v in c.values ) convert(v)], expr : convert(c.expr) } ], edef == null ? null : convert(edef));
+				ESwitch(convert(e), [for( c in cases ) { values : [for( v in c.values ) convert(v)], expr : convert(c.expr), guard : c.guard != null ? convert(c.guard) : null } ], edef == null ? null : convert(edef));
 			case EMeta(m, params, esub):
 				var mpos = #if hscriptPos { file : p.file, min : e.pmin, max : e.pmax } #else p #end;
 				EMeta({ name : m, params : params == null ? [] : [for( p in params ) convert(p)], pos : mpos }, convert(esub));

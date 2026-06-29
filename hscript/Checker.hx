@@ -1211,19 +1211,31 @@ class Checker {
 			default:
 				error("Unsupported operation "+op.toString(), expr);
 			}
-		case ETry(etry, v, et, ecatch):
+		case ETry(etry, catches):
 			var vt = typeExpr(etry, withType);
 
-			var old = locals.get(v);
-			locals.set(v, makeType(et, ecatch));
-			var ct = typeExpr(ecatch, withType);
-			if( old != null ) locals.set(v,old) else locals.remove(v);
+			var resultType = null;
+			for(c in catches) {
+				var old = locals.get(c.v);
+				locals.set(c.v, makeType(c.t != null ? c.t : CTPath(["Dynamic"], []), c.expr));
+				var ct = typeExpr(c.expr, withType);
+				if( old != null ) locals.set(c.v,old) else locals.remove(c.v);
+
+				if( withType != NoValue ) {
+					if( resultType == null )
+						resultType = ct;
+					else if( tryUnify(resultType, ct) )
+						{/* ok */} else
+						unify(ct, resultType, c.expr);
+				}
+			}
 
 			if( withType == NoValue )
 				return TVoid;
-			if( tryUnify(vt,ct) )
-				return ct;
-			unify(ct,vt,ecatch);
+			if( resultType == null ) return vt;
+			if( tryUnify(vt, resultType) )
+				return resultType;
+			unify(resultType, vt, etry);
 			return vt;
 		case ESwitch(value, cases, defaultExpr):
 			var tmin = null;
@@ -1243,6 +1255,8 @@ class Checker {
 					var ct = typeExpr(v, WithType(vt));
 					unify(ct, vt, v);
 				}
+				if(c.guard != null)
+					typeExpr(c.guard, Value);
 				var et = typeExpr(c.expr, withType);
 				mergeType(et, c.expr);
 			}
@@ -1250,6 +1264,17 @@ class Checker {
 				mergeType( typeExpr(defaultExpr, withType), defaultExpr);
 			return withType == NoValue ? TVoid : tmin == null ? makeMono() : tmin;
 		case ENew(cl, params):
+		case EInterface(_,_,_):
+		case EAbstract(_,_,_):
+		case EUntyped(e):
+			typeExpr(e, withType);
+			return TDynamic;
+		case ETypedef(_,_):
+		case ECast(e, _):
+			return typeExpr(e, withType);
+		case ERegex(_,_):
+			return types.getType("EReg", []);
+		case EPackage(_):
 		default:
 		}
 		error("Don't know how to type "+edef(expr).getName(), expr);

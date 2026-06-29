@@ -586,6 +586,12 @@ class SScript {
 	}
 	#end
 
+	public function stop():Void {
+		active = false;
+		clear();
+		resetInterp();
+	}
+
 	public function destroy():Void {
 		if (_destroyed)
 			return;

@@ -228,7 +228,7 @@ enum Expr {
 	EArrayDecl( e : Array<Expr>, ?wantedType: CType );
 	ENew( cl : String, params : Array<Expr>, ?paramType:Array<CType> );
 	EThrow( e : Expr );
-	ETry( e : Expr, v : String, t : Null<CType>, ecatch : Expr );
+	ETry( e : Expr, catches : Array<CatchBlock> );
 	EObject( fl : Array<ObjectField> );
 	ETernary( cond : Expr, e1 : Expr, e2 : Expr );
 	ESwitch( e : Expr, cases : Array<SwitchCase>, ?defaultExpr : Expr );
@@ -239,9 +239,13 @@ enum Expr {
 	EPackage( ?n:String );
 	EImport( c : String, ?asname:String, ?isUsing:Bool, ?isStar:Bool );
 	EClass( name:String, fields:Array<Expr>, ?extend:String, interfaces:Array<String>, ?isFinal:Bool, ?isPrivate:Bool );
+	EInterface( name:String, fields:Array<Expr>, ?extend:Array<String> );
 	EEnum( en:EnumDecl, ?isAbstract:Bool );
+	ETypedef( name:String, t:CType );
+	EAbstract( name:String, underlyingType:Null<CType>, fields:Array<Expr> );
 	ECast(e:Expr, ?t:CType);
 	ERegex(e:String, flags:String);
+	EUntyped(e:Expr);
 }
 
 @:structInit
@@ -251,9 +255,17 @@ final class ObjectField {
 }
 
 @:structInit
+final class CatchBlock {
+	public var v : String;
+	public var t : Null<CType>;
+	public var expr : Expr;
+}
+
+@:structInit
 final class SwitchCase {
 	public var values : Array<Expr>;
 	public var expr : Expr;
+	public var guard : Null<Expr>;
 }
 
 @:structInit
@@ -277,6 +289,7 @@ final class EnumDecl {
 	public var name : String;
 	public var fields : Array<EnumField>;
 	public var underlyingType : Null<CType>;
+	public var functions : Null<Array<Expr>>;
 }
 
 @:structInit

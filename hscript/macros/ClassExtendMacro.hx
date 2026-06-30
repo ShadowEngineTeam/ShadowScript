@@ -493,8 +493,9 @@ class ClassExtendMacro {
 					if (__interp != null) {
 						if(__class__fields.contains(name)) {
 							var v:Dynamic = __interp.variables.get(name);
+							var ba:Bool = @:privateAccess __interp.isBypassAccessor;
 							if(v != null && v is hscript.Property) 
-								return cast(v, hscript.Property).callGetter(name);
+								return cast(v, hscript.Property).get(ba);
 							return v;
 						}
 						else @:privateAccess {
@@ -518,8 +519,9 @@ class ClassExtendMacro {
 					if (__interp != null) {
 						if(__class__fields.contains(name)) {
 							var v:Dynamic = __interp.variables.get(name);
+							var ba:Bool = @:privateAccess __interp.isBypassAccessor;
 							if(v != null && v is hscript.Property) 
-								return cast(v, hscript.Property).callGetter(name);
+								return cast(v, hscript.Property).get(ba);
 							return v;
 						}
 						else @:privateAccess {
@@ -545,8 +547,9 @@ class ClassExtendMacro {
 					if (__interp != null) {
 						if(__class__fields.contains(name)) {
 							var v:Dynamic = __interp.variables.get(name);
+							var ba:Bool = @:privateAccess __interp.isBypassAccessor;
 							if(v != null && v is hscript.Property) 
-								return cast(v, hscript.Property).callSetter(name, val);
+								return cast(v, hscript.Property).set(val, ba);
 							__interp.variables.set(name, val);
 							return val;
 						}
@@ -575,8 +578,9 @@ class ClassExtendMacro {
 					if (__interp != null) {
 						if(__class__fields.contains(name)) {
 							var v:Dynamic = __interp.variables.get(name);
+							var ba:Bool = @:privateAccess __interp.isBypassAccessor;
 							if(v != null && v is hscript.Property) 
-								return cast(v, hscript.Property).callSetter(name, val);
+								return cast(v, hscript.Property).set(val, ba);
 							__interp.variables.set(name, val);
 							return val;
 						}

@@ -1347,9 +1347,8 @@ class Interp {
 						if(!staticVariables.exists(n))
 							staticVariables.set(n, locals[n].r);
 					} else if(allowPublicVariables && isPublic == true) {
-						if(!publicVariables.exists(n))
-							publicVariables.set(n, locals[n].r);
-					} else if(!variables.exists(n)) {
+						publicVariables.set(n, locals[n].r);
+					} else {
 						variables.set(n, locals[n].r);
 					}
 				}

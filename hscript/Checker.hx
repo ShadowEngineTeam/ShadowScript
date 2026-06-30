@@ -1266,9 +1266,6 @@ class Checker {
 		case ENew(cl, params):
 		case EInterface(_,_,_) | EAbstract(_,_,_) | ETypedef(_,_) | EPackage(_):
 			return TVoid;
-		case EUntyped(e):
-			typeExpr(e, withType);
-			return TDynamic;
 		case ECast(e, _):
 			return typeExpr(e, withType);
 		case ERegex(_,_):

@@ -39,7 +39,7 @@ class UsingHandler {
 		"StringTools" => { // https://github.com/pisayesiwsi/hscript-iris/blob/dev/crowplexus/iris/Iris.hx#L45
 			fields: Type.getClassFields(StringTools),
 			call: function(o:Dynamic, f:String, args:Array<Dynamic>):Dynamic {
-				if (f == "isEof") // has @:noUsing
+				if (f == "isEof") // has @:noUsing, and isn't reflectable as native Haxe metadata
 					return null;
 				return switch (Type.typeof(o)) {
 					case TInt if (f == 'hex'):

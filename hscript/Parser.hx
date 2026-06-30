@@ -308,7 +308,6 @@ class Parser {
 			case EFor(_,_,e): isBlock(e);
 			case EReturn(e): e != null && isBlock(e);
 			case ETry(_, catches): catches.length > 0 ? isBlock(catches[catches.length - 1].expr) : false;
-			case EUntyped(e): isBlock(e);
 			case EMeta(_, _, e): isBlock(e);
 			default: false;
 		}
@@ -1302,8 +1301,6 @@ class Parser {
 			} else
 				ensure(TSemicolon);
 			mk(EAbstract(name, underlyingType, fields), p1);
-		case "untyped":
-			mk(EUntyped(parseExpr()), p1);
 		case "dynamic":
 			var nextToken = token();
 			switch(nextToken) {

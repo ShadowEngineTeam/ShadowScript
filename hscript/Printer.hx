@@ -226,9 +226,6 @@ class Printer {
 		case ETypedef(name, t):
 			add('typedef $name = ');
 			addType(t);
-		case EUntyped(e):
-			add('untyped ');
-			expr(e);
 		case ECast(e, t):
 			var safe = t != null;
 			add("cast ");

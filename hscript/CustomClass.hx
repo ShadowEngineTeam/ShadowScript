@@ -54,11 +54,48 @@ class CustomClass implements IHScriptCustomClassBehaviour {
 		}
 
 		for (f in __class.fields) {
-			switch (Tools.expr(f)) {
-				case EVar(n): __class__fields.push(n);
-				case EFunction(_, _, n, _, _, _, isOverride): 
+			var fieldMetas:Array<Dynamic> = null;
+			var fieldExpr = Tools.expr(f);
+			// Unwrap EMeta to extract per-field metadata
+			while (fieldExpr.match(EMeta(_, _, _))) {
+				switch(fieldExpr) {
+					case EMeta(mname, margs, inner):
+						if (fieldMetas == null) fieldMetas = [];
+						var metaParams:Array<Dynamic> = null;
+						if (margs != null) {
+							metaParams = [];
+							for (a in margs) metaParams.push(__interp.expr(a));
+						}
+						fieldMetas.push({ name: mname, params: metaParams });
+						fieldExpr = Tools.expr(inner);
+					default: break;
+				}
+			}
+			switch (fieldExpr) {
+				case EVar(n): {
+					__class__fields.push(n);
+					if (fieldMetas != null)
+						UnsafeReflect.setField(this, "__metas_" + n, fieldMetas);
+				}
+				case EFunction(_, _, n, ret, _, _, isOverride): {
 					if(isOverride) __overrideFields.push(n);
 					__class__fields.push(n);
+					if (fieldMetas != null) {
+						UnsafeReflect.setField(this, "__metas_" + n, fieldMetas);
+						for (m in fieldMetas) {
+							if ((m.name == "to" || m.name == ":to") && ret != null) {
+								var targetType = new Printer().typeToString(ret);
+								var list:Array<Dynamic> = UnsafeReflect.field(this, "__conversions_to");
+								if (list == null) {
+									list = [];
+									UnsafeReflect.setField(this, "__conversions_to", list);
+								}
+								// fn is resolved lazily via hget so it always reflects the bound instance method
+								list.push({ targetType: targetType, fieldName: n });
+							}
+						}
+					}
+				}
 				default: continue;
 			}
 			@:privateAccess __interp.exprReturn(f);

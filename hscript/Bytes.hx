@@ -134,22 +134,26 @@ class Bytes {
 		case ERegex(e, f):
 			doEncodeString(e);
 			doEncodeString(f);
-		case EClass(_, _, _, _):
-			// TODO
-		case EInterface(_, _, _):
-			// TODO
+		case EClass(name, fields, extend, _):
+			doEncodeString(name);
+			bout.addByte(fields.length);
+			for(f in fields) doEncode(f);
+			doEncodeString(extend == null ? "" : extend);
+		case EInterface(name, fields, extend):
+			doEncodeString(name);
+			bout.addByte(fields.length);
+			for(f in fields) doEncode(f);
+			doEncodeString(extend == null || extend.length == 0 ? "" : extend[0]);
 		case EEnum(en):
 			doEncodeString(en.name);
 			bout.addByte(en.fields.length);
 			for(f in en.fields) doEncodeString(f.name);
 		case ETypedef(name, t):
-			// TODO
+			doEncodeString(name);
 		case EAbstract(name, _, fields):
 			doEncodeString(name);
 			bout.addByte(fields.length);
 			for(f in fields) doEncode(f);
-		case EUntyped(e):
-			// TODO
 		case EConst(c):
 			doEncodeConst(c);
 		case EIdent(v):
@@ -429,8 +433,6 @@ class Bytes {
 			ECast(doDecode(), null);
 		case 35:
 			ERegex(doDecodeString(), doDecodeString());
-		case 36:
-			EUntyped(doDecode());
 		case 255:
 			null;
 		default:

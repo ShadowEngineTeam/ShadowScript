@@ -69,7 +69,6 @@ class Tools {
 		case EMeta(name, args, e): if( args != null ) for( a in args ) f(a); f(e);
 		case ECheckType(e,_): f(e);
 		case ETypedef(_, _):
-		case EUntyped(e): f(e);
 		default:
 		}
 	}
@@ -105,7 +104,6 @@ class Tools {
 		case EInterface(name, fields, extend): EInterface(name, [for( e in fields ) f(e)], extend);
 		case EAbstract(name, t, fields): EAbstract(name, t, [for( e in fields ) f(e)]);
 		case ETypedef(name, t): ETypedef(name, t);
-		case EUntyped(e): EUntyped(f(e));
 		default: expr(e);
 		}
 		return mk(edef, e);

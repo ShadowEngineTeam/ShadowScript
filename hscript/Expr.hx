@@ -245,7 +245,6 @@ enum Expr {
 	EAbstract( name:String, underlyingType:Null<CType>, fields:Array<Expr> );
 	ECast(e:Expr, ?t:CType);
 	ERegex(e:String, flags:String);
-	EUntyped(e:Expr);
 }
 
 @:structInit

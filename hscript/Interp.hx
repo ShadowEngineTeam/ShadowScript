@@ -333,6 +333,8 @@ class Interp {
 			case EArray(e, index):
 				var arr:Dynamic = expr(e);
 				var index:Dynamic = expr(index);
+				var r = tryArrayAccessSet(arr, index, v);
+				if (r != null) return r;
 				if (isMap(arr)) {
 					setMapValue(getMap(arr), index, v);
 				} else {
@@ -419,9 +421,12 @@ class Interp {
 			case EArray(e, index):
 				var arr:Dynamic = expr(e);
 				var index:Dynamic = expr(index);
-				if (isMap(arr)) {
+				if (arr is IHScriptAbstractBehaviour && cast(arr, IHScriptAbstractBehaviour).hasArr) {
+					var cur = tryArrayAccessGet(arr, index);
+					v = fop(cur, expr(e2));
+					tryArrayAccessSet(arr, index, v);
+				} else if (isMap(arr)) {
 					var map = getMap(arr);
-
 					v = fop(map.get(index), expr(e2));
 					map.set(index, v);
 				} else {
@@ -666,6 +671,181 @@ class Interp {
 		return null;
 	}
 
+	public static function hasMeta(val:Dynamic, name:String):Bool {
+		return getMeta(val, name) != null;
+	}
+
+	public static function isNoCompletionField(val:Dynamic, fieldName:String):Bool {
+		var metas:Array<Dynamic> = getMetas(val);
+		if (metas != null) {
+			for (m in metas) {
+				if ((m.name == "noCompletion" || m.name == ":noCompletion") && m.params != null) {
+					var params:Array<Dynamic> = cast m.params;
+					for (p in params) {
+						if (p == fieldName) return true;
+					}
+				}
+			}
+		}
+		// Check field-specific metadata
+		try {
+			var fieldMetas:Array<Dynamic> = cast UnsafeReflect.field(val, "__metas_" + fieldName);
+			if (fieldMetas != null) {
+				for (m in fieldMetas) {
+					if (m.name == "noCompletion" || m.name == ":noCompletion") return true;
+				}
+			}
+		} catch(e:Dynamic) {}
+		return false;
+	}
+
+	function tryOpOverload(op:String, a:Dynamic, ?b:Dynamic):Null<Dynamic> {
+		if (a is IHScriptAbstractBehaviour) {
+			var ab:IHScriptAbstractBehaviour = cast a;
+			if (ab.hasOp) return ab.hop(op, a, b);
+		}
+		// Also check right operand for symmetry
+		if (b != null && b is IHScriptAbstractBehaviour) {
+			var ab:IHScriptAbstractBehaviour = cast b;
+			if (ab.hasOp) return ab.hop(op, a, b);
+		}
+		return null;
+	}
+
+	function tryArrayAccessGet(obj:Dynamic, key:Dynamic):Null<Dynamic> {
+		if (obj is IHScriptAbstractBehaviour) {
+			var ab:IHScriptAbstractBehaviour = cast obj;
+			if (ab.hasArr) return ab.harrayget(key);
+		}
+		return null;
+	}
+
+	function tryArrayAccessSet(obj:Dynamic, key:Dynamic, val:Dynamic):Null<Dynamic> {
+		if (obj is IHScriptAbstractBehaviour) {
+			var ab:IHScriptAbstractBehaviour = cast obj;
+			if (ab.hasArr) return ab.harrayset(key, val);
+		}
+		return null;
+	}
+
+	function tryResolve(obj:Dynamic, name:String):Null<Dynamic> {
+		if (obj is IHScriptAbstractBehaviour) {
+			var ab:IHScriptAbstractBehaviour = cast obj;
+			if (ab.hasResolve) return ab.hresolve(name);
+		}
+		// also check for __resolve method
+		try {
+			var resolveFn = UnsafeReflect.field(obj, "__resolve");
+			if (resolveFn != null && Reflect.isFunction(resolveFn)) {
+				return resolveFn(name);
+			}
+		} catch(e:Dynamic) {}
+		return null;
+	}
+
+	function tryForwardGet(obj:Dynamic, field:String):Null<Dynamic> {
+		if (obj == null) return null;
+		var metas = getMetas(obj);
+		if (metas != null) {
+			for (m in metas) {
+				if ((m.name == "forward" || m.name == ":forward") && m.params != null) {
+					var params:Array<Dynamic> = cast m.params;
+					for (p in params) {
+						var targetField:String = Std.string(p);
+						if (targetField != null && targetField.length > 0) {
+							var target = get(obj, targetField);
+							if (target != null) {
+								var v = get(target, field);
+								if (v != null) return v;
+							}
+						}
+					}
+				}
+			}
+		}
+		return null;
+	}
+
+	function tryForwardSet(obj:Dynamic, field:String, val:Dynamic):Bool {
+		if (obj == null) return false;
+		var metas = getMetas(obj);
+		if (metas != null) {
+			for (m in metas) {
+				if ((m.name == "forward" || m.name == ":forward") && m.params != null) {
+					var params:Array<Dynamic> = cast m.params;
+					for (p in params) {
+						var targetField:String = Std.string(p);
+						if (targetField != null && targetField.length > 0) {
+							var target = get(obj, targetField);
+							if (target != null) {
+								try {
+									set(target, field, val);
+									return true;
+								} catch(e:Dynamic) {}
+							}
+						}
+					}
+				}
+			}
+		}
+		return false;
+	}
+
+	// @:from / @:to — applies stored conversion functions
+	// For @:to: if val has a @:to conversion registered (instance method on a custom class,
+	// or static method on a custom class via "using"), call it. Optionally restrict to a target type name.
+	public static function tryConvertTo(val:Dynamic, ?targetType:String):Dynamic {
+		if (val == null) return null;
+		var list:Array<Dynamic> = UnsafeReflect.field(val, "__conversions_to");
+		if (list == null) return null;
+		for (entry in list) {
+			if (targetType != null && entry.targetType != targetType) continue;
+			try {
+				if (Reflect.hasField(entry, "fn") && entry.fn != null && Reflect.isFunction(entry.fn)) {
+					return entry.fn();
+				} else if (Reflect.hasField(entry, "fieldName") && val is IHScriptCustomClassBehaviour) {
+					var beh:IHScriptCustomClassBehaviour = cast val;
+					var bound = beh.hget(entry.fieldName);
+					if (bound != null && Reflect.isFunction(bound)) return Reflect.callMethod(val, bound, []);
+				}
+			} catch(e:Dynamic) {}
+		}
+		return null;
+	}
+
+	// For @:from: try to create an instance of targetType (a CustomClassHandler) from val,
+	// using any static @:from function registered on it.
+	public static function tryConvertFrom(targetType:Dynamic, val:Dynamic):Dynamic {
+		if (targetType == null) return null;
+		var list:Array<Dynamic> = UnsafeReflect.field(targetType, "__conversions_from");
+		if (list == null) return null;
+		for (entry in list) {
+			try {
+				var fn:Dynamic = entry.fn;
+				if (fn != null && Reflect.isFunction(fn)) {
+					var result = Reflect.callMethod(null, fn, [val]);
+					if (result != null) return result;
+				}
+			} catch(e:Dynamic) {}
+		}
+		return null;
+	}
+
+	function tryCallable(obj:Dynamic, args:Array<Dynamic>):Null<Dynamic> {
+		if (obj is IHScriptAbstractBehaviour) {
+			var ab:IHScriptAbstractBehaviour = cast obj;
+			if (ab.hasCall) return ab.hcall(args);
+		}
+		// also check for __call method
+		try {
+			var callFn = UnsafeReflect.field(obj, "__call");
+			if (callFn != null && Reflect.isFunction(callFn)) {
+				return UnsafeReflect.callMethodSafe(obj, callFn, args);
+			}
+		} catch(e:Dynamic) {}
+		return null;
+	}
+
 	public inline function error(e:#if hscriptPos ErrorDef #else Error #end, rethrow = false):Dynamic {
 		#if hscriptPos var e = new Error(e, curExpr.pmin, curExpr.pmax, curExpr.origin, curExpr.line); #end
 
@@ -828,6 +1008,12 @@ class Interp {
 			}
 		}
 		
+		// @:resolve fallback
+		if (hasScriptObject) {
+			var r = tryResolve(scriptObject, id);
+			if (r != null) return r;
+		}
+
 		varLocationCache.set(id, VNotFound);
 		var cl = Type.resolveClass(id);
 		if(cl != null) return cl;
@@ -1142,8 +1328,7 @@ class Interp {
 				}
 				variables.set(name, iface);
 				return null;
-			case EUntyped(e):
-				return expr(e);
+
 		case ETypedef(name, t):
 				switch(t) {
 					case CTPath(path, _):
@@ -1280,24 +1465,35 @@ class Interp {
 				}
 				return get(field, f);
 			case EBinop(op, e1, e2):
+				var opStr = op.toString();
 				return switch(op) {
-					case OpAdd: expr(e1) + expr(e2);
-					case OpSub: expr(e1) - expr(e2);
-					case OpMult: expr(e1) * expr(e2);
-					case OpDiv: expr(e1) / expr(e2);
-					case OpMod: expr(e1) % expr(e2);
-					case OpAnd: expr(e1) & expr(e2);
-					case OpOr: expr(e1) | expr(e2);
-					case OpXor: expr(e1) ^ expr(e2);
-					case OpShl: expr(e1) << expr(e2);
-					case OpShr: expr(e1) >> expr(e2);
-					case OpUshr: expr(e1) >>> expr(e2);
-					case OpEq: expr(e1) == expr(e2);
-					case OpNeq: expr(e1) != expr(e2);
-					case OpGte: expr(e1) >= expr(e2);
-					case OpLte: expr(e1) <= expr(e2);
-					case OpGt: expr(e1) > expr(e2);
-					case OpLt: expr(e1) < expr(e2);
+					case OpAdd, OpSub, OpMult, OpDiv, OpMod, OpAnd, OpOr, OpXor, OpShl, OpShr, OpUshr,
+						 OpEq, OpNeq, OpGte, OpLte, OpGt, OpLt, OpInterval:
+						var a = expr(e1);
+						var b = expr(e2);
+						var r = tryOpOverload(opStr, a, b);
+						if (r != null) r
+						else switch(op) {
+							case OpAdd: a + b;
+							case OpSub: a - b;
+							case OpMult: a * b;
+							case OpDiv: a / b;
+							case OpMod: a % b;
+							case OpAnd: a & b;
+							case OpOr: a | b;
+							case OpXor: a ^ b;
+							case OpShl: a << b;
+							case OpShr: a >> b;
+							case OpUshr: a >>> b;
+							case OpEq: a == b;
+							case OpNeq: a != b;
+							case OpGte: a >= b;
+							case OpLte: a <= b;
+							case OpGt: a > b;
+							case OpLt: a < b;
+							case OpInterval: new IntIterator(a, b);
+							default: error(EInvalidOp(opStr));
+						}
 					case OpBoolOr: expr(e1) == true || expr(e2) == true;
 					case OpBoolAnd: expr(e1) == true && expr(e2) == true;
 					case OpIs: checkIsType(e1, e2);
@@ -1305,7 +1501,6 @@ class Interp {
 					case OpNcoal:
 						var expr1:Dynamic = expr(e1);
 						expr1 == null ? expr(e2) : expr1;
-					case OpInterval: new IntIterator(expr(e1), expr(e2));
 					case OpArrow: null;
 					case OpAddAssign: evalAssignOp(OpAddAssign, function(v1:Dynamic, v2:Dynamic) return v1 + v2, e1, e2);
 					case OpSubAssign: evalAssignOp(OpSubAssign, function(v1:Float, v2:Float) return v1 - v2, e1, e2);
@@ -1319,16 +1514,20 @@ class Interp {
 					case OpShrAssign: evalAssignOp(OpShrAssign, function(v1, v2) return v1 >> v2, e1, e2);
 					case OpUshrAssign: evalAssignOp(OpUshrAssign, function(v1, v2) return v1 >>> v2, e1, e2);
 					case OpNcoalAssign: evalAssignOp(OpNcoalAssign, function(v1, v2) return v1 == null ? v2 : v1, e1, e2);
-					default: error(EInvalidOp(op.toString()));
+					default: error(EInvalidOp(opStr));
 				}
 			case EUnop(op, prefix, e):
+				var opStr = (prefix ? "" : "Post") + op.toString();
+				var val:Dynamic = expr(e);
+				var r = tryOpOverload(opStr, val);
+				if (r != null) return r;
 				switch (op) {
-					case OpNot: return expr(e) != true;
-					case OpNeg: return -expr(e);
+					case OpNot: return (val != true : Dynamic);
+					case OpNeg: return -val;
 					case OpIncrement: return increment(e, prefix, 1);
 					case OpDecrement: return increment(e, prefix, -1);
-					case OpNegBits: return ~expr(e);
-					default: error(EInvalidOp(op.toString()));
+					case OpNegBits: return ~val;
+					default: error(EInvalidOp(opStr));
 				}
 			case ECall(e, params):
 				var args:Array<Dynamic> = makeArgs(params);
@@ -1342,7 +1541,13 @@ class Interp {
 						}
 						return fcall(obj, f, args);
 					default:
-						return call(null, expr(e), args);
+						var fn:Dynamic = expr(e);
+						// @:callable support
+						if (fn != null) {
+							var r = tryCallable(fn, args);
+							if (r != null) return r;
+						}
+						return call(null, fn, args);
 				}
 			case EIf(econd, e1, e2):
 				return if (expr(econd) == true) expr(e1) else if (e2 == null) null else expr(e2);
@@ -1543,6 +1748,8 @@ class Interp {
 			case EArray(e, index):
 				var arr:Dynamic = expr(e);
 				var index:Dynamic = expr(index);
+				var r = tryArrayAccessGet(arr, index);
+				if (r != null) return r;
 				if (isMap(arr)) {
 					return getMapValue(getMap(arr), index);
 				} else {
@@ -1706,8 +1913,20 @@ class Interp {
 				}
 				isBypassAccessor = oldAccessor;
 				return val;
-			case ECheckType(e, _), ECast(e, _):
+			case ECheckType(e, _):
 				return expr(e);
+			case ECast(e, t):
+				var val = expr(e);
+				if (t != null) {
+					var targetType = new Printer().typeToString(t);
+					var converted = tryConvertTo(val, targetType);
+					if (converted != null) return converted;
+					if (customClasses.exists(targetType)) {
+						var converted2 = tryConvertFrom(customClasses.get(targetType), val);
+						if (converted2 != null) return converted2;
+					}
+				}
+				return val;
 		}
 		return null;
 	}
@@ -1876,6 +2095,19 @@ class Interp {
 		if (o == null)
 			error(EInvalidAccess(f));
 
+		// @:deprecated warning
+		try {
+			var fieldMetas:Array<Dynamic> = cast UnsafeReflect.field(o, "__metas_" + f);
+			if (fieldMetas != null) {
+				for (m in fieldMetas) {
+					if (m.name == "deprecated") {
+						var msg = m.params != null && m.params.length > 0 ? m.params[0] : "";
+						warn(ECustom('Field "$f" is deprecated${msg != "" ? ": " + msg : ""}'));
+					}
+				}
+			}
+		} catch(e:Dynamic) {}
+
 		var cls:Null<Class<Dynamic>> = useRedirects ? Type.getClass(o) : null;
 		if (useRedirects && {
 			var cl:Null<String> = getClassType(o, cls);
@@ -1927,12 +2159,40 @@ class Interp {
 				v = Reflect.getProperty(cls, f);
 			#end
 		}
+
+		// @:resolve fallback — try resolve if still null
+		if (v == null) {
+			v = tryResolve(o, f);
+		}
+
+		// @:forward fallback — try forwarding to underlying field
+		if (v == null) {
+			v = tryForwardGet(o, f);
+		}
 		return v;
 	}
 
 	function set(o:Dynamic, f:String, v:Dynamic):Dynamic {
 		if (o == null)
 			error(EInvalidAccess(f));
+
+		// @:const check
+		try {
+			var fieldMetas:Array<Dynamic> = cast UnsafeReflect.field(o, "__metas_" + f);
+			if (fieldMetas != null) {
+				for (m in fieldMetas) {
+					if (m.name == "const" || m.name == ":const") {
+						error(ECustom('Cannot modify constant field "$f"'));
+					}
+				}
+			}
+		} catch(e:Dynamic) {}
+		// also check @:const on object's global metas
+		var metas:Array<Dynamic> = getMetas(o);
+		if (metas != null) {
+			var fmeta = getMeta(o, "const_" + f);
+			if (fmeta != null) error(ECustom('Cannot modify constant field "$f"'));
+		}
 
 		if (useRedirects && {
 			var cl:Null<String> = getClassType(o);
@@ -1955,6 +2215,9 @@ class Interp {
 			var obj:IHScriptCustomBehaviour = cast o;
 			return obj.hset(f, v);
 		}
+		// @:forward fallback — try forwarding to underlying field
+		if (tryForwardSet(o, f, v)) return v;
+
 		// Can use unsafe reflect here, since we checked for null above
 		#if cpp
 		if(isBypassAccessor) {
@@ -2023,6 +2286,8 @@ class Interp {
 		var fields:Array<String> = customClass.__staticFields.copy();
 
 		fn = function(o:Dynamic, f:String, args:Array<Dynamic>):Dynamic {
+			if (customClass.isNoUsing(f))
+				return null;
 			var field:Dynamic = customClass.getField(f);
 			if (field == null || !Reflect.isFunction(field))
 				return null;
@@ -2101,6 +2366,23 @@ class Interp {
 			return cast(c, IHScriptCustomConstructor).hnew(args);
 		if(UnsafeReflect.isObject(c) && Reflect.isFunction(c.hnew))
 			return c.hnew(args);
+		// @:structInit — if class has this metadata and single arg is an object,
+		// create instance then copy fields from the object
+		if (args.length == 1 && UnsafeReflect.isObject(args[0])) {
+			try {
+				var metas:Array<Dynamic> = cast UnsafeReflect.field(c, "__metas");
+				if (metas != null) {
+					for (m in metas) {
+						if (m.name == "structInit" || m.name == ":structInit") {
+							var instance = Type.createEmptyInstance(c);
+							for (f in Reflect.fields(args[0]))
+								UnsafeReflect.setField(instance, f, Reflect.field(args[0], f));
+							return instance;
+						}
+					}
+				}
+			} catch(e:Dynamic) {}
+		}
 		return Type.createInstance(c, args);
 	}
 }

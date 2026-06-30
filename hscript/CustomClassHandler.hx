@@ -1,5 +1,8 @@
 package hscript;
 
+import hscript.Expr;
+import hscript.utils.UnsafeReflect;
+
 /**
  * Provides handlers for static custom class fields and instantiation.
  */
@@ -64,11 +67,34 @@ class CustomClassHandler implements IHScriptCustomConstructor implements IHScrip
 			var isValid:Bool = false;
 			var staticField:Bool = false;
 			var fieldName:String = null;
-			switch (Tools.expr(e)) {
-				case EVar(n, _, _, _, isStatic) | EFunction(_, _, n, _, _, isStatic):
+			var fieldRet:CType = null;
+			var fieldMetas:Array<Dynamic> = null;
+			var fieldExpr = Tools.expr(e);
+			// Unwrap EMeta to extract per-field metadata (mirrors CustomClass.hx)
+			while (fieldExpr.match(EMeta(_, _, _))) {
+				switch(fieldExpr) {
+					case EMeta(mname, margs, inner):
+						if (fieldMetas == null) fieldMetas = [];
+						var metaParams:Array<Dynamic> = null;
+						if (margs != null) {
+							metaParams = [];
+							for (a in margs) metaParams.push(__interp.expr(a));
+						}
+						fieldMetas.push({ name: mname, params: metaParams });
+						fieldExpr = Tools.expr(inner);
+					default: break;
+				}
+			}
+			switch (fieldExpr) {
+				case EVar(n, _, _, _, isStatic):
 					isValid = true;
 					staticField = isStatic;
 					fieldName = n;
+				case EFunction(_, _, n, ret, _, isStatic):
+					isValid = true;
+					staticField = isStatic;
+					fieldName = n;
+					fieldRet = ret;
 				default:
 			}
 
@@ -76,6 +102,35 @@ class CustomClassHandler implements IHScriptCustomConstructor implements IHScrip
 				__interp.exprReturn(e);
 				__staticFields.push(fieldName);
 				fields.remove(e);
+
+				if (fieldMetas != null) {
+					UnsafeReflect.setField(this, "__metas_" + fieldName, fieldMetas);
+					for (m in fieldMetas) {
+						if ((m.name == "to" || m.name == ":to") && fieldRet != null) {
+							var targetType = new Printer().typeToString(fieldRet);
+							var fn:Dynamic = __interp.variables.get(fieldName);
+							if (fn != null) {
+								var list:Array<Dynamic> = UnsafeReflect.field(this, "__conversions_to");
+								if (list == null) {
+									list = [];
+									UnsafeReflect.setField(this, "__conversions_to", list);
+								}
+								list.push({ targetType: targetType, fn: fn });
+							}
+						}
+						if (m.name == "from" || m.name == ":from") {
+							var fn:Dynamic = __interp.variables.get(fieldName);
+							if (fn != null) {
+								var listFrom:Array<Dynamic> = UnsafeReflect.field(this, "__conversions_from");
+								if (listFrom == null) {
+									listFrom = [];
+									UnsafeReflect.setField(this, "__conversions_from", listFrom);
+								}
+								listFrom.push({ fn: fn });
+							}
+						}
+					}
+				}
 			}
 		}
 	}
@@ -87,6 +142,15 @@ class CustomClassHandler implements IHScriptCustomConstructor implements IHScrip
 	inline function hasField(name:String) {
         return __staticFields.contains(name);
     }
+
+	@:allow(hscript.Interp)
+	function isNoUsing(name:String):Bool {
+		var metas:Array<Dynamic> = UnsafeReflect.field(this, "__metas_" + name);
+		if (metas == null) return false;
+		for (m in metas)
+			if (m.name == "noUsing" || m.name == ":noUsing") return true;
+		return false;
+	}
 
     function getField(name:String, allowProperty:Bool = true):Dynamic {
         var f = __interp.variables.get(name);

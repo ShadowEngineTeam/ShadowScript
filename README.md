@@ -3,7 +3,7 @@ ShadowScript
 
 A fork of hscript-improved, originally created to add the `SScript` class (ver 7.7.0) for use in Shadow Engine.
 
-Since then this fork has grown well past that: custom-class metadata support (`@:to`/`@:from`/`@:noUsing`/`@:forward`/`@:resolve`/`@:callable`/`@:const`/`@:deprecated`/`@:structInit`), abstract-style operator/array-access overloading for scripted and host objects, full `Bytes` serialization for class/interface/typedef expressions, and various bugfixes to the static-extension (`using`) and assignment-operator paths. See [Features](docs/FEATURES.md) for the full list, and [CHANGES](#changes-in-this-fork) below for what's specific to ShadowScript versus upstream hscript-improved.
+Since then this fork has grown well past that: full pattern matching in `switch` (destructuring, guards, or-patterns), standalone `abstract` declarations, type parameter constraints, wildcard imports (`import pkg.*;`), custom-class metadata support (`@:to`/`@:from`/`@:noUsing`/`@:forward`/`@:resolve`/`@:callable`/`@:const`/`@:deprecated`/`@:structInit`), abstract-style operator/array-access overloading for scripted and host objects, full `Bytes` serialization for class/interface/typedef/abstract expressions, and various bugfixes to the static-extension (`using`) and assignment-operator paths. See [Features](docs/FEATURES.md) for the full list, and [CHANGES](#changes-in-this-fork) below for what's specific to ShadowScript versus upstream hscript-improved.
 
 This fork is licensed under MIT; see the original hscript-improved README below.
 
@@ -117,6 +117,11 @@ Changes in this fork
 
 Beyond upstream `hscript-improved`, ShadowScript adds:
 
+- **Full pattern matching in `switch`**: array/object destructuring (`case [a,b,c]:`, `case {x:a,y:b}:`), wildcards (`_`), variable-binding cases, `if` guards, and or-patterns (`case 1|3|5:`), evaluated with first-match semantics.
+- **Type parameter constraints** (`<T:Constraint>`) accepted on functions, parsed like Haxe but not enforced at runtime, same treatment as other type annotations.
+- **Standalone `abstract Name(Type) { ... }` declarations**, registered like custom classes and constructible with `new`/`hnew`.
+- **Wildcard imports** (`import pkg.*;`), which pull in every class/enum-valued static field on the target type as top-level identifiers instead of one `import` per symbol.
+- **Expression-level metadata** (`@:keep`, `@:deprecated('msg')`, etc.) on arbitrary statements, retained for runtime inspection rather than parsed and discarded.
 - **Abstract-like behavior on scripted/host objects** via `IHScriptAbstractBehaviour`: operator overloading (`hop`), array-access overloading (`harrayget`/`harrayset`), a resolve fallback (`hresolve`, for objects with no matching field), and callable objects (`hcall`, so an object can be invoked like a function).
 - **Field/class metadata recognized by the interpreter**, attached the same way Haxe attaches metadata (`@:meta` before a field or class):
   - `@:to` / `@:from`: basic abstract-style conversions, used when evaluating `cast(x, T)`.
@@ -127,7 +132,7 @@ Beyond upstream `hscript-improved`, ShadowScript adds:
   - `@:structInit`: allow constructing a class from a single anonymous-object argument.
   - `@:noCompletion`: hide a field from completion-aware tooling built on top of hscript.
 - **Static extensions (`using`) for custom (scripted) classes**, not just real Haxe classes, including `@:noUsing` exclusion on scripted static functions.
-- **Full `Bytes` round-tripping for `EClass`, `EInterface`, and `ETypedef`** expressions (previously these were write-side no-ops in upstream, which corrupted the rest of the byte stream when serialized).
+- **Full `Bytes` round-tripping for `EClass`, `EInterface`, `ETypedef`, `EAbstract`, `EPackage`, `EImport`, `ECast`, and `ERegex`** expressions (previously several of these were write-side no-ops in upstream, which corrupted the rest of the byte stream when serialized).
 - Various correctness fixes around compound assignment (`+=` etc.) on arrays/maps/abstract-array-access objects, and the package (`EPackage`) opcode in `Bytes`.
 
 -----------

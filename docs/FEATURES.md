@@ -117,6 +117,87 @@
 
   `hscript.Bytes` can encode/decode the full expression set, including class, interface, and typedef declarations: round-tripping is exact for everything the interpreter itself uses (some structural detail that the interpreter doesn't care about, like full typedef bodies, is intentionally dropped on decode).
 
+- Pattern Matching (`switch`)
+
+  Beyond plain value equality, `switch` cases support full pattern matching:
+
+  ```haxe
+  switch([1, 2, 3]) {
+    case [a, b, c]: trace(a + b + c); // array destructuring: 6
+  }
+
+  switch([10, 20, 30]) {
+    case [a, _, _]: trace(a); // wildcards ignore positions: 10
+  }
+
+  switch([[1, 2], [3, 4]]) {
+    case [[a, b], _]: trace(a + b); // nested patterns: 3
+  }
+
+  switch({x: 1, y: 2}) {
+    case {x: a, y: b}: trace(a + b); // object destructuring: 3
+  }
+
+  switch(10) {
+    case x if (x > 5): trace(x * 2); // guard + binding: 20
+    case _: trace(0);
+  }
+
+  switch(3) {
+    case 1 | 3 | 5: trace(true); // or-patterns
+    case _: trace(false);
+  }
+  ```
+
+  - Bare identifiers in a `case` bind the matched value to that name (`case x: ...`) rather than requiring it to equal an existing variable.
+  - `_` is a wildcard that matches anything without binding.
+  - Cases are tried in source order (first match wins), and `if` guards may follow a pattern before the `:`.
+
+- Type Parameter Constraints
+
+  `<T:Constraint>` syntax is accepted on functions and parsed alongside type parameters; the constraint is consumed at parse time (matching Haxe's syntax) but, like other type annotations, isn't enforced by the interpreter at runtime.
+
+  ```haxe
+  var f = function<T:Int>(x:T):T return x;
+  f(5);
+
+  var g = function<T,U>(x:T, y:U):T return x;
+  g(1, "a");
+  ```
+
+- Standalone `abstract` Declarations
+
+  `abstract Name(UnderlyingType) { ... }` can be parsed and registered as a custom-class-like type, constructible via `new`/`hnew`. The underlying value is conventionally stored on a `__value__` field:
+
+  ```haxe
+  abstract MyInt(Int) {
+    public function new(v) __value__ = v;
+  }
+
+  var x = new MyInt(42);
+  x.__value__; // 42
+  ```
+
+- Wildcard Imports (`import pkg.*;`)
+
+  Importing with a trailing `.*` pulls in every class/enum-valued static field exposed on the target type (via reflection) as a top-level identifier in the script, instead of requiring one `import` per symbol:
+
+  ```haxe
+  import haxe.ds.*;
+  ```
+
+  Names already bound in `variables` are left untouched, so script-local declarations always take precedence over a wildcard import.
+
+- Expression-Level Metadata
+
+  In addition to the field/class metadata above, simple `@:meta` / `@:meta("arg")` annotations can precede any statement (`var`, `function`, etc.) and are recorded for runtime inspection rather than being only a parser-level hint:
+
+  ```haxe
+  @:keep var x = 5;
+  @:deprecated('use bar') function foo() return 1;
+  @:keep @:noDebug var y = 1;
+  ```
+
 - Misc.
   - Allow using type parameters for creating objects (i.e. `var a = new TypedObject<Int>();`)
   - Allow `package` declaration. Ignored by the interpreter.

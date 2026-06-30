@@ -791,7 +791,7 @@ class Interp {
 		return false;
 	}
 
-	// @:from / @:to — applies stored conversion functions
+	// @:from / @:to: applies stored conversion functions
 	// For @:to: if val has a @:to conversion registered (instance method on a custom class,
 	// or static method on a custom class via "using"), call it. Optionally restrict to a target type name.
 	public static function tryConvertTo(val:Dynamic, ?targetType:String):Dynamic {
@@ -2160,12 +2160,12 @@ class Interp {
 			#end
 		}
 
-		// @:resolve fallback — try resolve if still null
+		// @:resolve fallback: try resolve if still null
 		if (v == null) {
 			v = tryResolve(o, f);
 		}
 
-		// @:forward fallback — try forwarding to underlying field
+		// @:forward fallback: try forwarding to underlying field
 		if (v == null) {
 			v = tryForwardGet(o, f);
 		}
@@ -2215,7 +2215,7 @@ class Interp {
 			var obj:IHScriptCustomBehaviour = cast o;
 			return obj.hset(f, v);
 		}
-		// @:forward fallback — try forwarding to underlying field
+		// @:forward fallback: try forwarding to underlying field
 		if (tryForwardSet(o, f, v)) return v;
 
 		// Can use unsafe reflect here, since we checked for null above
@@ -2366,7 +2366,7 @@ class Interp {
 			return cast(c, IHScriptCustomConstructor).hnew(args);
 		if(UnsafeReflect.isObject(c) && Reflect.isFunction(c.hnew))
 			return c.hnew(args);
-		// @:structInit — if class has this metadata and single arg is an object,
+		// @:structInit: if class has this metadata and single arg is an object,
 		// create instance then copy fields from the object
 		if (args.length == 1 && UnsafeReflect.isObject(args[0])) {
 			try {

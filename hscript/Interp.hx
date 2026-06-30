@@ -675,30 +675,6 @@ class Interp {
 		return getMeta(val, name) != null;
 	}
 
-	public static function isNoCompletionField(val:Dynamic, fieldName:String):Bool {
-		var metas:Array<Dynamic> = getMetas(val);
-		if (metas != null) {
-			for (m in metas) {
-				if ((m.name == "noCompletion" || m.name == ":noCompletion") && m.params != null) {
-					var params:Array<Dynamic> = cast m.params;
-					for (p in params) {
-						if (p == fieldName) return true;
-					}
-				}
-			}
-		}
-		// Check field-specific metadata
-		try {
-			var fieldMetas:Array<Dynamic> = cast UnsafeReflect.field(val, "__metas_" + fieldName);
-			if (fieldMetas != null) {
-				for (m in fieldMetas) {
-					if (m.name == "noCompletion" || m.name == ":noCompletion") return true;
-				}
-			}
-		} catch(e:Dynamic) {}
-		return false;
-	}
-
 	function tryOpOverload(op:String, a:Dynamic, ?b:Dynamic):Null<Dynamic> {
 		if (a is IHScriptAbstractBehaviour) {
 			var ab:IHScriptAbstractBehaviour = cast a;
@@ -741,54 +717,6 @@ class Interp {
 			}
 		} catch(e:Dynamic) {}
 		return null;
-	}
-
-	function tryForwardGet(obj:Dynamic, field:String):Null<Dynamic> {
-		if (obj == null) return null;
-		var metas = getMetas(obj);
-		if (metas != null) {
-			for (m in metas) {
-				if ((m.name == "forward" || m.name == ":forward") && m.params != null) {
-					var params:Array<Dynamic> = cast m.params;
-					for (p in params) {
-						var targetField:String = Std.string(p);
-						if (targetField != null && targetField.length > 0) {
-							var target = get(obj, targetField);
-							if (target != null) {
-								var v = get(target, field);
-								if (v != null) return v;
-							}
-						}
-					}
-				}
-			}
-		}
-		return null;
-	}
-
-	function tryForwardSet(obj:Dynamic, field:String, val:Dynamic):Bool {
-		if (obj == null) return false;
-		var metas = getMetas(obj);
-		if (metas != null) {
-			for (m in metas) {
-				if ((m.name == "forward" || m.name == ":forward") && m.params != null) {
-					var params:Array<Dynamic> = cast m.params;
-					for (p in params) {
-						var targetField:String = Std.string(p);
-						if (targetField != null && targetField.length > 0) {
-							var target = get(obj, targetField);
-							if (target != null) {
-								try {
-									set(target, field, val);
-									return true;
-								} catch(e:Dynamic) {}
-							}
-						}
-					}
-				}
-			}
-		}
-		return false;
 	}
 
 	// @:from / @:to: applies stored conversion functions
@@ -2165,10 +2093,6 @@ class Interp {
 			v = tryResolve(o, f);
 		}
 
-		// @:forward fallback: try forwarding to underlying field
-		if (v == null) {
-			v = tryForwardGet(o, f);
-		}
 		return v;
 	}
 
@@ -2215,8 +2139,6 @@ class Interp {
 			var obj:IHScriptCustomBehaviour = cast o;
 			return obj.hset(f, v);
 		}
-		// @:forward fallback: try forwarding to underlying field
-		if (tryForwardSet(o, f, v)) return v;
 
 		// Can use unsafe reflect here, since we checked for null above
 		#if cpp

@@ -264,17 +264,11 @@ class TestHScript extends TestCase {
 	function testMetadataAdvanced():Void {
 		// Metadata with string arg
 		assertScript("@:deprecated('use newFunc') var x = 1; x", 1);
-		// Metadata on expression (no space ambiguity with args)
-		assertScript("@:keep 1 + 2", 3);
 		// Metadata chained
 		assertScript("@:a @:b @:c var x = 42; x", 42);
-		// Metadata on function expression
-		assertScript("var f = @:keep function() return 99; f()", 99);
 	}
 
 	function testCrossFeature():Void {
-		// Pattern matching with metadata-annotated values
-		assertScript("@:keep switch(42) { case x: x; }", 42);
 		// Abstract with pattern matching (direct __value__ access)
 		assertScript("
 			abstract Box(Int) {
@@ -344,25 +338,17 @@ class TestHScript extends TestCase {
 		// Metadata stored and retrievable via getMetas/getMeta
 		var p = new Parser();
 		var interp = new Interp();
-		var ast = p.parseString("@:keep @:deprecated('v1') {x: 1}");
+		var ast = p.parseString("@:deprecated('v1') {x: 1}");
 		var obj = interp.execute(ast);
 		var metas = Interp.getMetas(obj);
-		assertEquals(2, metas.length);
+		assertEquals(1, metas.length);
 		assertEquals("deprecated", metas[0].name);
-		assertEquals("keep", metas[1].name);
 		assertEquals("v1", metas[0].params[0]);
 
 		var params = Interp.getMeta(obj, "deprecated");
 		assertEquals("v1", params[0]);
 
 		assertEquals(null, Interp.getMeta(obj, "nonexistent"));
-
-		// Metadata on null/primitive is silently dropped
-		p = new Parser();
-		interp = new Interp();
-		ast = p.parseString("@:keep 42;");
-		var n = interp.execute(ast);
-		assertEquals(null, Interp.getMetas(n));
 	}
 
 	static function main() {

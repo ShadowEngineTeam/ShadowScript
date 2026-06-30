@@ -98,11 +98,9 @@
     ```
 
   - `@:noUsing`: exclude a static-extension function from being picked up by `using`, even if its enclosing class is imported with `using`.
-  - `@:forward`: if a field isn't found directly on an object, forward the get/set to a named underlying field.
   - `@:const`: reassigning a field tagged `@:const` throws instead of silently succeeding.
   - `@:deprecated` / `@:deprecated("message")`: accessing the field emits a warning through the interpreter's normal warning channel.
   - `@:structInit`: allows `new MyClass({ a: 1, b: 2 })` to construct an instance by copying matching fields from the object argument.
-  - `@:noCompletion`: purely a hint for completion-aware tooling (editors, etc.) built on top of hscript; the interpreter itself ignores it at runtime aside from exposing `Interp.isNoCompletionField`.
 
 - Operator & Array-Access Overloading (`IHScriptAbstractBehaviour`)
 
@@ -193,9 +191,9 @@
   In addition to the field/class metadata above, simple `@:meta` / `@:meta("arg")` annotations can precede any statement (`var`, `function`, etc.) and are recorded for runtime inspection rather than being only a parser-level hint:
 
   ```haxe
-  @:keep var x = 5;
+  var x = 5;
   @:deprecated('use bar') function foo() return 1;
-  @:keep @:noDebug var y = 1;
+  @:noDebug var y = 1;
   ```
 
 - Misc.

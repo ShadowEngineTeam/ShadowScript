@@ -1,8 +1,11 @@
 ShadowScript
 =======
 
-Just a fork of hscript-improved to have SScript class (ver 7.7.0) so we could use it in Shadow Engine.<br>
-This fork licensed under MIT and see OG README down below.
+A fork of hscript-improved, originally created to add the `SScript` class (ver 7.7.0) for use in Shadow Engine.
+
+Since then this fork has grown well past that: custom-class metadata support (`@:to`/`@:from`/`@:noUsing`/`@:forward`/`@:resolve`/`@:callable`/`@:const`/`@:deprecated`/`@:structInit`), abstract-style operator/array-access overloading for scripted and host objects, full `Bytes` serialization for class/interface/typedef expressions, and various bugfixes to the static-extension (`using`) and assignment-operator paths. See [Features](docs/FEATURES.md) for the full list, and [CHANGES](#changes-in-this-fork) below for what's specific to ShadowScript versus upstream hscript-improved.
+
+This fork is licensed under MIT; see the original hscript-improved README below.
 
 hscript-improved
 =======
@@ -108,6 +111,26 @@ Compared to Haxe, limitations are :
 - the parser supports optional types for `var` and `function` if `allowTypes` is set, but the interpreter ignores them
 - you can enable per-expression position tracking by compiling with `-D hscriptPos`
 - you can parse some type declarations (import, class, typedef, etc.) with parseModule
+
+Changes in this fork
+--------------------
+
+Beyond upstream `hscript-improved`, ShadowScript adds:
+
+- **Abstract-like behavior on scripted/host objects** via `IHScriptAbstractBehaviour`: operator overloading (`hop`), array-access overloading (`harrayget`/`harrayset`), a resolve fallback (`hresolve`, for objects with no matching field), and callable objects (`hcall`, so an object can be invoked like a function).
+- **Field/class metadata recognized by the interpreter**, attached the same way Haxe attaches metadata (`@:meta` before a field or class):
+  - `@:to` / `@:from`: basic abstract-style conversions, used when evaluating `cast(x, T)`.
+  - `@:noUsing`: exclude a static-extension function from being picked up by `using`.
+  - `@:forward`: forward unresolved field get/set to an underlying field.
+  - `@:const`: make a field reject reassignment after construction.
+  - `@:deprecated`: emit a warning when a tagged field is accessed.
+  - `@:structInit`: allow constructing a class from a single anonymous-object argument.
+  - `@:noCompletion`: hide a field from completion-aware tooling built on top of hscript.
+- **Static extensions (`using`) for custom (scripted) classes**, not just real Haxe classes, including `@:noUsing` exclusion on scripted static functions.
+- **Full `Bytes` round-tripping for `EClass`, `EInterface`, and `ETypedef`** expressions (previously these were write-side no-ops in upstream, which corrupted the rest of the byte stream when serialized).
+- Various correctness fixes around compound assignment (`+=` etc.) on arrays/maps/abstract-array-access objects, and the package (`EPackage`) opcode in `Bytes`.
+
+-----------
 
 Install
 -------

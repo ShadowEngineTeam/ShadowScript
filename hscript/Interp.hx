@@ -154,6 +154,7 @@ class Interp {
 	public var locals:Map<String, DeclaredVar>;
 
 	var depth:Int = 0;
+	var blockDepth:Int = 0; // nesting level of `{ }` blocks; >1 means inside a nested block (not top-level)
 	var inTry:Bool;
 	var declared:Array<RedeclaredVar>;
 	var returnValue:Dynamic;
@@ -537,6 +538,7 @@ class Interp {
 
 	public function execute(expr:Expr):Dynamic {
 		depth = 0;
+		blockDepth = 0;
 		locals = new Map();
 		declared = [];
 		return exprReturn(expr);
@@ -1341,7 +1343,7 @@ class Interp {
 					isFinal: isFinal == true
 				};
 				locals.set(n, declVar);
-				if (depth == 0) {
+				if (depth == 0 && blockDepth <= 1) {
 					varLocationCache.remove(n);
 					if(allowStaticVariables && isStatic == true) {
 						if(!staticVariables.exists(n))
@@ -1357,9 +1359,11 @@ class Interp {
 				return expr(e);
 			case EBlock(exprs):
 				var old:Int = declared.length;
+				blockDepth++;
 				var v:Null<Dynamic> = null;
 				for (e in exprs)
 					v = expr(e);
+				blockDepth--;
 				restore(old);
 				return v;
 			case EField(e, f, s):

@@ -126,6 +126,7 @@ class UnsafeReflect {
 
 	public #if !cpp inline #end static function isObject(v:Dynamic):Bool {
 		#if cpp
+		if (v == null) return false;
 		untyped {
 			var t:Int = v.__GetType();
 			return t == ObjectType.vtObject || t == ObjectType.vtClass || t == ObjectType.vtString || t == ObjectType.vtArray;
@@ -137,6 +138,7 @@ class UnsafeReflect {
 
 	public #if !cpp inline #end static function isEnumValue(v:Dynamic):Bool {
 		#if cpp
+		if (v == null) return false;
 		untyped {
 			return v.__GetType() == ObjectType.vtEnum;
 		}

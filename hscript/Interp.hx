@@ -1396,12 +1396,12 @@ class Interp {
 				return switch(op) {
 					case OpAdd, OpSub, OpMult, OpDiv, OpMod, OpAnd, OpOr, OpXor, OpShl, OpShr, OpUshr,
 						 OpEq, OpNeq, OpGte, OpLte, OpGt, OpLt, OpInterval:
-						var a = expr(e1);
-						var b = expr(e2);
+						var a:Dynamic = expr(e1);
+						var b:Dynamic = expr(e2);
 						var r = tryOpOverload(opStr, a, b);
 						if (r != null) r
 						else switch(op) {
-							case OpAdd: a + b;
+							case OpAdd: (a is String || b is String) ? (Std.string(a) + Std.string(b)) : a + b;
 							case OpSub: a - b;
 							case OpMult: a * b;
 							case OpDiv: a / b;

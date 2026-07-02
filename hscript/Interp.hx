@@ -260,6 +260,13 @@ class Interp {
 			staticVariables.set(name, v);
 		else if (allowPublicVariables && publicVariables.exists(name))
 			publicVariables.set(name, v);
+		else if (variables.exists(name))
+			variables.set(name, v);
+		else if (allowPublicVariables)
+			// Truly new name in a pack that shares public vars: publish it so
+			// sibling scripts declaring/reading it later resolve the same value
+			// (fixes cross-script assignment made before the `public var` declaration runs).
+			publicVariables.set(name, v);
 		else
 			variables.set(name, v);
 	}
@@ -1348,8 +1355,13 @@ class Interp {
 					if(allowStaticVariables && isStatic == true) {
 						if(!staticVariables.exists(n))
 							staticVariables.set(n, locals[n].r);
+						// live only in the shared map, so functions don't capture a stale
+						// local copy and miss cross-script writes
+						locals.remove(n);
 					} else if(allowPublicVariables && isPublic == true) {
-						publicVariables.set(n, locals[n].r);
+						if(!publicVariables.exists(n))
+							publicVariables.set(n, locals[n].r);
+						locals.remove(n);
 					} else {
 						variables.set(n, locals[n].r);
 					}

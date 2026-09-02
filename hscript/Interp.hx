@@ -94,6 +94,25 @@ class Interp {
 
 	private var __instanceFields:Map<String, Bool>;
 
+	/**
+	 * Cache of `"__metas_" + fieldName`.
+	 *
+	 * `get()` and `set()` probe for a `__metas_<field>` field to honour `@:deprecated` / `@:const`.
+	 * Building that name inline meant one String allocation on every script field read and, through
+	 * `fcall()`, on every script method call - i.e. several per expression, every frame, for any
+	 * modchart. The name only depends on the field, so resolve it once.
+	 */
+	private static var __metaFieldNames:Map<String, String> = new Map();
+
+	static inline function metaFieldName(f:String):String {
+		var name:String = __metaFieldNames.get(f);
+		if (name == null) {
+			name = "__metas_" + f;
+			__metaFieldNames.set(f, name);
+		}
+		return name;
+	}
+
 	/** Maps an array of field names into a lookup map (O(1) membership checks). **/
 	private static function fieldsToMap(m:Map<String, Bool>, fields:Array<String>, clear:Bool = true) {
 		if(clear) m.clear();
@@ -2237,7 +2256,7 @@ class Interp {
 
 		// @:deprecated warning
 		try {
-			var fieldMetas:Array<Dynamic> = cast UnsafeReflect.field(o, "__metas_" + f);
+			var fieldMetas:Array<Dynamic> = cast UnsafeReflect.field(o, metaFieldName(f));
 			if (fieldMetas != null) {
 				for (m in fieldMetas) {
 					if (m.name == "deprecated") {
@@ -2314,7 +2333,7 @@ class Interp {
 
 		// @:const check
 		try {
-			var fieldMetas:Array<Dynamic> = cast UnsafeReflect.field(o, "__metas_" + f);
+			var fieldMetas:Array<Dynamic> = cast UnsafeReflect.field(o, metaFieldName(f));
 			if (fieldMetas != null) {
 				for (m in fieldMetas) {
 					if (m.name == "const" || m.name == ":const") {

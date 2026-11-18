@@ -689,9 +689,15 @@ class Interp {
 		}
 	}
 
+	// A case on a name that is already a variable compares with it instead of capturing
+	function isDefined(n:String):Bool {
+		return resolve(n, false) != null;
+	}
+
 	function matchPatternValue(p:Expr, v:Dynamic):Bool {
 		return switch (Tools.expr(p)) {
 			case EIdent("_"): true;
+			case EIdent(n) if (isDefined(n)): resolve(n) == v;
 			case EIdent(n):
 				declared.push({n: n, old: locals.get(n), depth: depth});
 				locals.set(n, {r: v, depth: depth, isFinal: false});
@@ -1980,6 +1986,11 @@ class Interp {
 							case EIdent("_"):
 								match = true;
 								break;
+							case EIdent(n) if (isDefined(n)):
+								if (resolve(n) == val) {
+									match = true;
+									break;
+								}
 							case EIdent(n):
 								declared.push({n: n, old: locals.get(n), depth: depth});
 								locals.set(n, {r: val, depth: depth, isFinal: false});

@@ -195,9 +195,18 @@ class Interp {
 	public var allowStaticVariables:Bool = false;
 	public var allowPublicVariables:Bool = false;
 
+	@:deprecated("refer to 'hscript.Config.IMPORT_BLACKLIST'")
 	public var importBlocklist(get, never):Array<String>;
 	private inline function get_importBlocklist():Array<String> {
 		return Config.IMPORT_BLACKLIST;
+	}
+
+	private static function isBlocked(className:String):Bool {
+		for (blocked in Config.IMPORT_BLACKLIST)
+			if (className == blocked || className.startsWith(blocked + "."))
+				return true;
+		
+		return false;
 	}
 
 	var usingHandler:UsingHandler;
@@ -934,9 +943,9 @@ class Interp {
 					case VNotFound:
 						var cached = __typeResolveCache.get(id);
 						if (cached != null) return cached;
-						var cl = Type.resolveClass(id);
+						var cl = isBlocked(id) ? null : Type.resolveClass(id);
 						if(cl != null) { __typeResolveCache.set(id, cl); return cl; }
-						var en = Type.resolveEnum(id);
+						var en = isBlocked(id) ? null : Type.resolveEnum(id);
 						if(en != null) { __typeResolveCache.set(id, en); return en; }
 						if (doException) error(EUnknownVariable(id));
 						null;
@@ -1043,9 +1052,9 @@ class Interp {
 		varLocationCache.set(id, VNotFound);
 		var cached = __typeResolveCache.get(id);
 		if (cached != null) return cached;
-		var cl = Type.resolveClass(id);
+		var cl = isBlocked(id) ? null : Type.resolveClass(id);
 		if(cl != null) { __typeResolveCache.set(id, cl); return cl; }
-		var en = Type.resolveEnum(id);
+		var en = isBlocked(id) ? null : Type.resolveEnum(id);
 		if(en != null) { __typeResolveCache.set(id, en); return en; }
 		if (doException)
 			error(EUnknownVariable(id));
@@ -1109,12 +1118,13 @@ class Interp {
 
 	/** Handles `import` / `using` statements (extracted from the expr() switch). **/
 	@:noInline
+	@:access(hscript.CustomClassHandler)
 	function exprImport(clsName:String, aliasAs:Null<String>, isUsing:Bool, isStar:Bool):Void {
 		if(!importEnabled) return;
 
 		if(isStar) {
 			var realClassName = clsName;
-			if(importBlocklist.contains(realClassName)) return;
+			if(isBlocked(realClassName)) return;
 
 			var cls = Type.resolveClass(realClassName);
 			if(cls != null) {
@@ -1165,7 +1175,7 @@ class Interp {
 		
 		function importResolve(__clsName:String):Null<Dynamic> {
 			var _realClassName = getLocalImportRedirect(__clsName);
-			if(importBlocklist.contains(_realClassName)) {
+			if(isBlocked(_realClassName)) {
 				warn(ECustom('Invalid class: $_realClassName is blacklisted'));
 				return null;
 			}
@@ -1176,7 +1186,7 @@ class Interp {
 		}
 
 		var cl = importResolve(realClassName);
-		var en = Type.resolveEnum(realClassName);
+		var en = isBlocked(realClassName) ? null : Type.resolveEnum(realClassName);
 		//trace(realClassName, cl, en, splitClassName);
 
 		// Allow for flixel.ui.FlxBar.FlxBarFillDirection;
@@ -1186,19 +1196,36 @@ class Interp {
 				realClassName = splitClassName.join(".");
 
 				cl = importResolve(realClassName);
-				en = Type.resolveEnum(realClassName);
+				en = isBlocked(realClassName) ? null : Type.resolveEnum(realClassName);
 				//trace(realClassName, cl, en, splitClassName);
 			}
 		}
 
 		if(cl == null && en == null) {
-			if(allowStaticImports) { //allows for static imports like "haxe.io.Path.normalize"
+			if(allowStaticImports && oldSplitName.length > 1) { //allows for static imports like "haxe.io.Path.normalize" for both compiled and scripted classes
 				var clPth:Array<String> = oldSplitName.copy();
 				var funcName:String = clPth.pop();
-				var statField:Dynamic = Reflect.getProperty(Type.resolveClass(StringTools.trim(clPth.join("."))), funcName);
+				var statField:Dynamic = null;
+
+				// scripted class
+				final handler = customClasses.get(clPth[clPth.length-1]);
+				if(handler != null) {
+					statField = handler.hasField(funcName) ? handler.getField(funcName, false) : null;
+				} else {
+					final parent = importResolve(clPth.join("."));
+					if (parent != null) {
+						statField = Reflect.getProperty(parent, funcName);
+					} 
+				}
 
 				if(statField != null) {
-					variables.set((toSetName != null && toSetName.length > 0 ? toSetName : funcName), statField);
+					final varName = (toSetName != null && toSetName.length > 0 ? toSetName : funcName);
+					variables.set(varName, statField);
+
+					// clear cache
+					varLocationCache.remove(varName);
+					__typeResolveCache.remove(varName);
+					
 					return;
 				}
 			}
@@ -2337,6 +2364,8 @@ class Interp {
 		var cached = __fieldTypeCache.get(fullPath);
 		if (cached != null)
 			return cached == _TYPE_PATH_NEG ? null : cached;
+		if (isBlocked(fullPath))
+			return null;
 		var cl:Dynamic = Type.resolveClass(fullPath);
 		if (cl == null)
 			cl = Type.resolveEnum(fullPath);
@@ -2625,7 +2654,7 @@ class Interp {
 	function cnew(cl:String, args:Array<Dynamic>):Dynamic {
 		var c:Dynamic = __cnewClassCache.get(cl);
 		if (c == null) {
-			c = Type.resolveClass(cl);
+			c = isBlocked(cl) ? null : Type.resolveClass(cl);
 			if (c != null)
 				__cnewClassCache.set(cl, c);
 		}

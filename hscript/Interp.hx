@@ -1075,18 +1075,15 @@ class Interp {
 
 	public static var importRedirects:Map<String, String> = new Map();
 	public static function getImportRedirect(className:String):String {
-		var redirect = importRedirects.get(className);
-		return redirect != null ? redirect : className;
+		if(importRedirects == null) return className;
+		return importRedirects.get(className) ?? className;
 	}
 
-	public var localImportRedirects:Map<String, String> = new Map();
+	public var localImportRedirects:Map<String, String>;
 	public function getLocalImportRedirect(className:String):String {
-		var redirect = importRedirects.get(className);
-		if (redirect != null)
-			className = redirect;
-		redirect = localImportRedirects.get(className);
-		if (redirect != null)
-			className = redirect;
+		className = getImportRedirect(className);
+		if (localImportRedirects != null)
+			className = localImportRedirects.get(className) ?? className;
 		return className;
 	}
 
@@ -1179,6 +1176,7 @@ class Interp {
 			return;
 		}
 		
+		// TODO: extract this method
 		function importResolve(__clsName:String):Null<Dynamic> {
 			var _realClassName = getLocalImportRedirect(__clsName);
 			if(isBlocked(_realClassName)) {
@@ -1203,7 +1201,6 @@ class Interp {
 
 				cl = importResolve(realClassName);
 				en = isBlocked(realClassName) ? null : Type.resolveEnum(realClassName);
-				//trace(realClassName, cl, en, splitClassName);
 			}
 		}
 

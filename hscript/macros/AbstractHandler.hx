@@ -46,6 +46,7 @@ class AbstractHandler {
 			if(key == "cpp.CharStar") return fields; // Error: cannot initialize a variable of type 'char *' with an rvalue of type 'const char *', Due to Func
 			if(Config.DISALLOW_ABSTRACT_AND_ENUM.contains(cl.module) || Config.DISALLOW_ABSTRACT_AND_ENUM.contains(fkey)) return fields;
 			if(cl.module.contains("_")) return fields; // Weird issue, sorry
+			if(cl.isPrivate) return fields; // Scripts cannot reach private abstracts, and their shadow classes would clash with other modules' ones
 
 			var fqName = cl.module + "." + cl.name;
             if (modifiedClasses.contains(fqName))

@@ -2027,7 +2027,13 @@ class Interp {
 					isBypassAccessor = true;
 				}
 				var metaName = (a.charCodeAt(0) == ':'.code) ? a.substr(1) : a;
-				var val = expr(e);
+				var val:Dynamic = null;
+				try {
+					val = expr(e);
+				} catch(err:Dynamic) {
+					isBypassAccessor = oldAccessor;
+					rethrow(err);
+				}
 				if(UnsafeReflect.isObject(val)) {
 					try {
 						var metas:Array<Dynamic> = UnsafeReflect.field(val, "__metas");

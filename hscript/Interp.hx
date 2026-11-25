@@ -28,6 +28,7 @@
  */
 package hscript;
 
+import hscript.utils.TypeListRegistry;
 import haxe.Exception;
 import haxe.ds.StringMap;
 import haxe.ds.ObjectMap;
@@ -166,7 +167,7 @@ class Interp {
 	/**
 	 * Custom Import resolver. It's called when an import couldn't be resolved.
 	 */
-	public var importFailedCallback:Array<String>->Null<String>->Bool;
+	public var importFailedCallback:Array<String>->Null<String>->?Bool->Bool;
 
 	public var customClasses:Map<String, CustomClassHandler>;
 	public var variables:Map<String, Dynamic>;
@@ -194,6 +195,9 @@ class Interp {
 
 	public var allowStaticVariables:Bool = false;
 	public var allowPublicVariables:Bool = false;
+	#if !hscriptNoWildcardImports
+	public var allowWildcardImports:Bool = true;
+	#end
 
 	@:deprecated("refer to 'hscript.Config.IMPORT_BLACKLIST'")
 	public var importBlocklist(get, never):Array<String>;
@@ -949,9 +953,9 @@ class Interp {
 					case VNotFound:
 						var cached = __typeResolveCache.get(id);
 						if (cached != null) return cached;
-						var cl = isBlocked(id) ? null : Type.resolveClass(id);
+						var cl = isBlocked(id) ? null : Tools.safeResolveClass(id);
 						if(cl != null) { __typeResolveCache.set(id, cl); return cl; }
-						var en = isBlocked(id) ? null : Type.resolveEnum(id);
+						var en = isBlocked(id) ? null : Tools.safeResolveEnum(id);
 						if(en != null) { __typeResolveCache.set(id, en); return en; }
 						if (doException) error(EUnknownVariable(id));
 						null;
@@ -1058,9 +1062,9 @@ class Interp {
 		varLocationCache.set(id, VNotFound);
 		var cached = __typeResolveCache.get(id);
 		if (cached != null) return cached;
-		var cl = isBlocked(id) ? null : Type.resolveClass(id);
+		var cl = isBlocked(id) ? null : Tools.safeResolveClass(id);
 		if(cl != null) { __typeResolveCache.set(id, cl); return cl; }
-		var en = isBlocked(id) ? null : Type.resolveEnum(id);
+		var en = isBlocked(id) ? null : Tools.safeResolveEnum(id);
 		if(en != null) { __typeResolveCache.set(id, en); return en; }
 		if (doException)
 			error(EUnknownVariable(id));
@@ -1124,12 +1128,24 @@ class Interp {
 	@:access(hscript.CustomClassHandler)
 	function exprImport(clsName:String, aliasAs:Null<String>, isUsing:Bool, isStar:Bool):Void {
 		if(!importEnabled) return;
-
+		
 		if(isStar) {
 			var realClassName = clsName;
 			if(isBlocked(realClassName)) return;
 
 			var cls = Type.resolveClass(realClassName);
+			if(cls == null) {
+				// not a class, so a package
+				#if !hscriptNoWildcardImports
+				if(!allowWildcardImports) {
+					error(ECustom('Wildcard imports are disabled'));
+				}
+				exprImportWildcard(clsName.trim());
+				#else
+				error(ECustom('Wildcard imports are omitted from this build'));
+				#end
+				return;
+			}
 			if(cls != null) {
 				for(field in Reflect.fields(cls)) {
 					if(!variables.exists(field)) {
@@ -1184,13 +1200,13 @@ class Interp {
 				return null;
 			}
 
-			var _cl = Type.resolveClass(_realClassName);
-			if(_cl == null) _cl = Type.resolveClass('${_realClassName}_HSC');
+			var _cl = Tools.safeResolveClass(_realClassName);
+			if(_cl == null) _cl = Tools.safeResolveClass('${_realClassName}_HSC');
 			return _cl;
 		}
 
 		var cl = importResolve(realClassName);
-		var en = isBlocked(realClassName) ? null : Type.resolveEnum(realClassName);
+		var en = isBlocked(realClassName) ? null : Tools.safeResolveEnum(realClassName);
 		//trace(realClassName, cl, en, splitClassName);
 
 		// Allow for flixel.ui.FlxBar.FlxBarFillDirection;
@@ -1200,7 +1216,7 @@ class Interp {
 				realClassName = splitClassName.join(".");
 
 				cl = importResolve(realClassName);
-				en = isBlocked(realClassName) ? null : Type.resolveEnum(realClassName);
+				en = isBlocked(realClassName) ? null : Tools.safeResolveEnum(realClassName);
 			}
 		}
 
@@ -1235,7 +1251,7 @@ class Interp {
 
 			beforeAlias = claVarName;
 			setAlias = aliasAs;
-			if(importFailedCallback == null || !importFailedCallback(oldSplitName, toSetName)){
+			if(importFailedCallback == null || !importFailedCallback(oldSplitName, toSetName, isStar)){
 				beforeAlias = null;
 				setAlias = null;
 				error(EInvalidClass(oldClassName));
@@ -1275,6 +1291,30 @@ class Interp {
 			}
 		}
 	}
+
+	#if !hscriptNoWildcardImports
+	/** Handles `*`(wildcard) imports **/
+	@:noInline // whatever this does
+	function exprImportWildcard(pkg):Void {
+		final types  = TypeListRegistry.get(pkg);
+		
+		if(types == null) {
+			if (importFailedCallback == null || !importFailedCallback(pkg.split("."), null, true)) {
+				// copying the invalid class error
+				error(ECustom('Invalid package: $pkg was not found'));
+			}
+			return;
+		}
+
+		for (type in types) {
+			final full = pkg + '.'+ type;
+
+			if(isBlocked(full)) continue;
+			if(variables.exists(type) || customClasses.exists(type)) continue;
+			try exprImport(full, null, false, false) catch(e) {}
+		}
+	}
+	#end
 
 	/** Handles `enum` declarations (extracted from the expr() switch). **/
 	@:noInline
@@ -2135,25 +2175,17 @@ class Interp {
 	}
 
 	inline function makeIterator(v:Dynamic, ?allowKeyValue = false):Iterator<Dynamic> {
-		#if js
-		// don't use try/catch (very slow)
+		#if (js || cpp)
 		if(v is Array) {
 			return allowKeyValue ? (v:Array<Dynamic>).keyValueIterator() : (v:Array<Dynamic>).iterator();
 		}
+		#end
+		#if js
+		// don't use try/catch (very slow)
 		if(allowKeyValue && v.keyValueIterator != null)
 			v = v.keyValueIterator();
 		else if (v.iterator != null)
 			v = v.iterator();
-		#elseif cpp
-		if (v is Array) {
-			return allowKeyValue ? (v:Array<Dynamic>).keyValueIterator() : (v:Array<Dynamic>).iterator();
-		}
-		if (allowKeyValue) {
-			try v = v.keyValueIterator() catch (e:Dynamic) {};
-		}
-		if (v.hasNext == null || v.next == null) {
-			try v = v.iterator() catch (e:Dynamic) {};
-		}
 		#else
 		if(allowKeyValue) 
 			try v = v.keyValueIterator() catch (e:Dynamic) {};
@@ -2188,9 +2220,11 @@ class Interp {
 		if(isKeyValue)
 			declared.push({n: ithv, old: locals.get(ithv), depth: depth});
 		declared.push({n: n, old: locals.get(n), depth: depth});
-		var it = makeIterator(expr(it), isKeyValue);
+		var it:Iterator<Dynamic> = makeIterator(expr(it), isKeyValue);
+		#if !hl
 		var _hasNext = it.hasNext;
 		var _next = it.next;
+		#end
 		var reuseVar = depth == 0 || !bodyHasFunctionLiteral(e);
 		var kvDecl:DeclaredVar = null;
 		var varDecl:DeclaredVar = null;
@@ -2198,8 +2232,8 @@ class Interp {
 			if (isKeyValue) kvDecl = {r: null, depth: depth, isFinal: false};
 			varDecl = {r: null, depth: depth, isFinal: false};
 		}
-		while (_hasNext()) {
-			var next = _next();
+		while (#if hl it.hasNext() #else _hasNext() #end) {
+			var next:Dynamic = #if hl it.next() #else _next() #end ;
 			if (isKeyValue) {
 				if (reuseVar) {
 					kvDecl.r = next.key;
@@ -2380,9 +2414,9 @@ class Interp {
 			return cached == _TYPE_PATH_NEG ? null : cached;
 		if (isBlocked(fullPath))
 			return null;
-		var cl:Dynamic = Type.resolveClass(fullPath);
+		var cl:Dynamic = Tools.safeResolveClass(fullPath);
 		if (cl == null)
-			cl = Type.resolveEnum(fullPath);
+			cl = Tools.safeResolveEnum(fullPath);
 		__fieldTypeCache.set(fullPath, cl != null ? cl : _TYPE_PATH_NEG);
 		return cl;
 	}
@@ -2668,7 +2702,7 @@ class Interp {
 	function cnew(cl:String, args:Array<Dynamic>):Dynamic {
 		var c:Dynamic = __cnewClassCache.get(cl);
 		if (c == null) {
-			c = isBlocked(cl) ? null : Type.resolveClass(cl);
+			c = isBlocked(cl) ? null : Tools.safeResolveClass(cl);
 			if (c != null)
 				__cnewClassCache.set(cl, c);
 		}

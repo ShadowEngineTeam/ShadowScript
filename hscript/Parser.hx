@@ -1027,6 +1027,7 @@ class Parser {
 						if( t != TDot ) {
 							if(t.match(TId("as"))) {
 								if(isUsing) error(ECustom('Expected . or ;'),tokenMin,tokenMax);
+								if(isStar) error(ECustom('Expected . or ; or as'),tokenMin,tokenMax);
 								t = token();
 								switch( t ) {
 									case TId(id):
@@ -1044,7 +1045,7 @@ class Parser {
 						switch( t ) {
 							case TId(id):
 								path.push(id);
-							case TOp("*"):
+							case TOp("*") if(!isUsing):
 								isStar = true;
 								break;
 							default:

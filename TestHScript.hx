@@ -35,7 +35,13 @@ class TestHScript extends TestCase {
 			for( v in Reflect.fields(vars) )
 				interp.variables.set(v,Reflect.field(vars,v));
 		var ret : Dynamic = interp.execute(program);
-		assertEquals(v, ret, pos);
+		if(Reflect.isEnumValue(v) && Reflect.isEnumValue(ret)) {
+			if(!Type.enumEq(v, ret)) {
+				assertEquals(Std.string(v), Std.string(ret), pos);
+			} else {
+				assertTrue(true, pos);
+			}
+		} else assertEquals(v, ret, pos);
 		assertPos.lineNumber += 1;
 	}
 
@@ -527,6 +533,14 @@ class TestHScript extends TestCase {
 		assertScript('import StringTools.contains; contains("hscript", "hscript")', true);
 		// scripted class field import
 		assertScript('class M {public static function double(val:Float){return val * 2;}} import M.double; double(10)', 20, null, true);
+		#if !hscriptNoWildcardImports
+		// wildcard imports
+		assertScript("import haxe.ds.*; StringMap", haxe.ds.StringMap);
+		final script = "import haxe.ds.*; var a = new StringMap(); a.set('hiii', 0xF0); a.get('hiii')";
+		assertScript(script, 0xF0);
+		assertScript(script+"; StringTools.trim(' hello ')","hello");
+		assertScript("import haxe.ds.*; Option.Some(123)", haxe.ds.Option.Some(123));
+		#end
 	}
 
 	function testClass() {
@@ -576,6 +590,15 @@ class TestHScript extends TestCase {
 		assertScript('var r = ~/Hello your Computer has ([0-9]+) virus/; r.match(str); r.matched(1)', "10", {str: "Hello your Computer has 10 virus"}, false, true);
 	}
 
+	function testBypassAccessor() {
+		final vars = {"BypassAccessor": TestBypassAccessor};
+		assertScript('var a = new BypassAccessor(); @:bypassAccessor { a.a = "hii"; } a.amt', 0, vars);
+		assertScript('var a = new BypassAccessor(); a.a = "hii"; a.amt', 1, vars);
+		
+		assertScript('function a() { @:bypassAccessor { return 1; }} a(); var b = new BypassAccessor(); b.a = "c"; b.amt', 1, vars);
+		assertScript('while (true) { @:bypassAccessor { break; }} var b = new BypassAccessor(); b.a = "c"; b.amt', 1, vars);	
+	}
+
 	static function main() {
 		#if ((haxe_ver < 4) && php)
 		// uncaught exception: The each() function is deprecated. This message will be suppressed on further calls (errno: 8192)
@@ -611,4 +634,13 @@ class TestClass {
 	public function getSum() {
 		return a + b;
 	}
+}
+class TestBypassAccessor {
+	public var a(default, set):String = "";
+	public var amt = 0;
+	function set_a(v) {
+		amt++;
+		return a = v;
+	}
+	function new() {}
 }
